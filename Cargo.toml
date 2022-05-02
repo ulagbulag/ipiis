@@ -1,0 +1,3 @@
+[workspace]
+members = ["api", "common", "pallet", "runtime"]
+default-members = ["runtime"]
