@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use futures::StreamExt;
 use ipis::core::{
     account::{Account, AccountRef},
-    anyhow::Result,
+    anyhow::{anyhow, Result},
 };
 use quinn::{Endpoint, ServerConfig};
 use rustls::Certificate;
@@ -52,12 +52,39 @@ impl IpiisServer {
 
         loop {
             let quinn::NewConnection {
-                connection: conn, ..
+                connection: conn,
+                mut bi_streams,
+                ..
             } = incoming.next().await.unwrap().await.unwrap();
             println!(
                 "[server] incoming connection: addr={}",
                 conn.remote_address(),
             );
+
+            // Each stream initiated by the client constitutes a new request.
+            while let Some(stream) = bi_streams.next().await {
+                let (mut send, recv) = match stream {
+                    Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
+                        dbg!("connection closed");
+                        break;
+                    }
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                    Ok(s) => s,
+                };
+
+                dbg!("reading");
+                let data = recv.read_to_end(usize::MAX).await?;
+                assert_eq!(data, &[0b00000001, 0x00, 0x00, 0x01, 0x02]);
+
+                dbg!("writing");
+                let data = "hello world!".to_string();
+                let data = ::ipis::rkyv::to_bytes::<_, 4096>(&data)?;
+
+                send.write_all(&data).await?;
+                send.finish().await?;
+            }
         }
     }
 }

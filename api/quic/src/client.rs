@@ -98,6 +98,7 @@ impl Ipiis for IpiisClient {
             .map_err(|e| anyhow!("failed to open stream: {}", e))?;
 
         // send opcode
+        dbg!("writing");
         send.write_u8(opcode.bits()).await?;
 
         // send data
@@ -109,6 +110,7 @@ impl Ipiis for IpiisClient {
         send.flush()
             .await
             .map_err(|e| anyhow!("failed to shutdown stream: {}", e))?;
+        dbg!("writing finished");
 
         // be ready for receiving
         Ok(Box::pin(recv))

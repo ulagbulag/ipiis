@@ -13,9 +13,10 @@ async fn main() -> Result<()> {
     let (server, certs) = run_server(5001).await?;
     let client = run_client(server, &certs, 5001).await?;
 
-    let res: () = client
-        .call_deserialized(Opcode::TEXT, &server, &42, &mut Infallible)
+    let res: String = client
+        .call_deserialized(Opcode::TEXT, &server, &258i32, &mut Infallible)
         .await?;
+    assert_eq!(res, "hello world!");
     Ok(())
 }
 
