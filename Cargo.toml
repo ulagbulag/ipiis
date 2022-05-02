@@ -1,3 +1,2 @@
 [workspace]
-members = ["api", "common", "pallet", "runtime"]
-default-members = ["runtime"]
+members = ["api/quic", "common", "pallet"]
