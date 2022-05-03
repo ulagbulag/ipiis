@@ -1,37 +1,13 @@
 use core::pin::Pin;
-use std::marker::PhantomData;
 
 use ipis::{
     async_trait::async_trait,
     bytecheck::CheckBytes,
     core::{account::AccountRef, anyhow::Result},
-    pin::PinnedInner,
-    rkyv::{
-        validation::{validators::DefaultValidator, CheckTypeError},
-        Archive, Deserialize, Infallible, Serialize,
-    },
+    pin::{Pinned, PinnedInner},
+    rkyv::{validation::validators::DefaultValidator, Archive, Deserialize, Infallible, Serialize},
     tokio::io::{AsyncRead, AsyncReadExt},
 };
-
-pub struct MaybeArchive<T> {
-    _type: PhantomData<T>,
-    raw: Vec<u8>,
-}
-
-impl<'a, T> MaybeArchive<T>
-where
-    T: Archive,
-    <T as Archive>::Archived: CheckBytes<DefaultValidator<'a>>,
-{
-    pub fn check_archived_root(
-        &'a self,
-    ) -> Result<
-        &'a <T as Archive>::Archived,
-        CheckTypeError<<T as Archive>::Archived, DefaultValidator<'a>>,
-    > {
-        ::ipis::rkyv::check_archived_root::<T>(&self.raw)
-    }
-}
 
 #[async_trait]
 pub trait Ipiis {
@@ -46,20 +22,20 @@ pub trait Ipiis {
         opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: &Req,
-    ) -> Result<MaybeArchive<Res>>
+    ) -> Result<Pinned<Res>>
     where
         Req: Serialize<Serializer> + Send + Sync,
         Res: Archive + Send,
+        <Res as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + Deserialize<Res, Infallible>,
     {
         let msg = ::ipis::rkyv::to_bytes(msg)?;
         let hint = Some(::core::mem::size_of::<Res>());
 
-        Ok(MaybeArchive {
-            _type: Default::default(),
-            raw: self
-                .call_raw_to_end(opcode, target, &mut msg.as_ref(), hint)
-                .await?,
-        })
+        let bytes = self
+            .call_raw_to_end(opcode, target, &mut msg.as_ref(), hint)
+            .await?;
+        PinnedInner::<Res>::new(bytes)
     }
 
     async fn call_deserialized<Req, Res>(
@@ -74,13 +50,9 @@ pub trait Ipiis {
         <Res as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + Deserialize<Res, Infallible>,
     {
-        let msg = ::ipis::rkyv::to_bytes(msg)?;
-        let hint = Some(::core::mem::size_of::<Res>());
-
-        let bytes = self
-            .call_raw_to_end(opcode, target, &mut msg.as_ref(), hint)
-            .await?;
-        PinnedInner::<Res>::new(bytes)?.deserialize_into()
+        self.call(opcode, target, msg)
+            .await
+            .and_then(|e: Pinned<Res>| e.deserialize_into())
     }
 
     async fn call_raw<Req>(
