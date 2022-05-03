@@ -1,2 +1,2 @@
 [workspace]
-members = ["api/quic", "common", "pallet"]
+members = ["api", "api/quic/common", "api/quic/native", "api/quic/wasi", "common", "pallet"]

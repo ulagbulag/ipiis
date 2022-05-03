@@ -1,6 +1,6 @@
 use bytecheck::CheckBytes;
-use ipiis_api_quic::{client::IpiisClient, opcode::Opcode, server::IpiisServer};
-use ipiis_common::Ipiis;
+use ipiis_api_quic_common::{opcode::Opcode, rustls::Certificate, Ipiis};
+use ipiis_api_quic_native::{client::IpiisClient, server::IpiisServer};
 use ipis::{
     class::Class,
     core::{
@@ -11,7 +11,6 @@ use ipis::{
     pin::Pinned,
 };
 use rkyv::{Archive, Deserialize, Serialize};
-use rustls::Certificate;
 
 #[tokio::main]
 async fn main() -> Result<()> {

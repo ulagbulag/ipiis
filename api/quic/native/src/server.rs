@@ -1,20 +1,26 @@
 use core::convert::Infallible;
 
-use bytecheck::CheckBytes;
 use futures::{Future, StreamExt};
-use ipiis_common::{Serializer, SERIALIZER_HEAP_SIZE};
+use ipiis_api_quic_common::{
+    arp::{ArpRequest, ArpResponse},
+    cert,
+    opcode::Opcode,
+    rustls::Certificate,
+    Serializer, SERIALIZER_HEAP_SIZE,
+};
 use ipis::{
+    bytecheck::CheckBytes,
     core::{
         account::{Account, AccountRef},
         anyhow::{anyhow, Result},
     },
     log::error,
     pin::{Pinned, PinnedInner},
+    rkyv,
     tokio::io::AsyncReadExt,
 };
 use quinn::{Endpoint, ServerConfig};
 use rkyv::{validation::validators::DefaultValidator, Archive, Deserialize, Serialize};
-use rustls::Certificate;
 
 pub struct IpiisServer {
     // TODO: remove this struct, rather implement `listen(port) -> Result<!>` directly
@@ -41,11 +47,11 @@ impl IpiisServer {
     }
 
     pub fn get_cert_chain(&self) -> Result<Vec<Certificate>> {
-        crate::cert::generate(&self.client.account_me).map(|(_, e)| e)
+        cert::generate(&self.client.account_me).map(|(_, e)| e)
     }
 
     fn get_server_config(&self) -> Result<ServerConfig> {
-        let (priv_key, cert_chain) = crate::cert::generate(&self.client.account_me)?;
+        let (priv_key, cert_chain) = cert::generate(&self.client.account_me)?;
 
         ServerConfig::with_single_cert(cert_chain, priv_key).map_err(Into::into)
     }
@@ -90,26 +96,25 @@ impl IpiisServer {
 
                 // recv opcode
                 let opcode = recv.read_u8().await?;
-                let buf = match crate::opcode::Opcode::from_bits(opcode) {
-                    Some(crate::opcode::Opcode::ARP) => {
+                let buf = match Opcode::from_bits(opcode) {
+                    Some(Opcode::ARP) => {
                         // recv data
                         let req = recv.read_to_end(usize::MAX).await?;
 
                         // unpack data
-                        let req = ::ipis::rkyv::check_archived_root::<crate::arp::ArpRequest>(&req)
+                        let req = ::ipis::rkyv::check_archived_root::<ArpRequest>(&req)
                             .map_err(|_| anyhow!("failed to parse the received bytes"))?;
-                        let req: crate::arp::ArpRequest =
-                            req.deserialize(&mut ::rkyv::Infallible)?;
+                        let req: ArpRequest = req.deserialize(&mut rkyv::Infallible)?;
 
                         // handle data
-                        let res = crate::arp::ArpResponse {
+                        let res = ArpResponse {
                             addr: self.client.get_address(&req.target).await?,
                         };
 
                         // pack data
                         ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
                     }
-                    Some(crate::opcode::Opcode::TEXT) => {
+                    Some(Opcode::TEXT) => {
                         // recv data
                         let req = recv.read_to_end(usize::MAX).await?;
 

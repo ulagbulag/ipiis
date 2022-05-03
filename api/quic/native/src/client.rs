@@ -1,7 +1,12 @@
 use core::pin::Pin;
 use std::net::SocketAddr;
 
-use ipiis_common::Ipiis;
+use ipiis_api_quic_common::{
+    arp::{ArpRequest, ArpResponse},
+    opcode::Opcode,
+    rustls::{self, Certificate},
+    Ipiis, cert,
+};
 use ipis::{
     async_trait::async_trait,
     core::{
@@ -11,9 +16,6 @@ use ipis::{
     tokio::io::{AsyncRead, AsyncWriteExt},
 };
 use quinn::{Connection, Endpoint};
-use rustls::Certificate;
-
-use crate::arp::ArpResponse;
 
 pub struct IpiisClient {
     pub(crate) account_me: Account,
@@ -37,7 +39,7 @@ impl IpiisClient {
         )
     }
 
-    pub fn with_address_db_path<P>(
+    pub(crate) fn with_address_db_path<P>(
         account_me: Account,
         account_primary: Option<AccountRef>,
         certs: &[Certificate],
@@ -52,7 +54,7 @@ impl IpiisClient {
             // TODO: allow to store in specific directory
             address_db: sled::open(tempfile::tempdir()?.path().join(path))?,
             endpoint: {
-                let mut cert_store = ::rustls::RootCertStore::empty();
+                let mut cert_store = rustls::RootCertStore::empty();
                 for cert in certs {
                     cert_store.add(cert)?;
                 }
@@ -70,7 +72,7 @@ impl IpiisClient {
 
 #[async_trait]
 impl Ipiis for IpiisClient {
-    type Opcode = crate::opcode::Opcode;
+    type Opcode = Opcode;
 
     fn account_me(&self) -> AccountRef {
         self.account_me.account_ref()
@@ -127,11 +129,7 @@ impl IpiisClient {
             Some(addr) => Ok(String::from_utf8(addr.to_vec())?.parse()?),
             None => match self.account_primary() {
                 Some(primary) => self
-                    .call_deserialized(
-                        crate::opcode::Opcode::ARP,
-                        &primary,
-                        &crate::arp::ArpRequest { target: *target },
-                    )
+                    .call_deserialized(Opcode::ARP, &primary, &ArpRequest { target: *target })
                     .await
                     .map(|res: ArpResponse| res.addr),
                 None => bail!("failed to get address: {}", target.to_string()),
@@ -141,7 +139,7 @@ impl IpiisClient {
 
     async fn get_connection(&self, target: &AccountRef) -> Result<Connection> {
         let addr = self.get_address(target).await?;
-        let server_name = crate::cert::get_name(target);
+        let server_name = cert::get_name(target);
 
         let new_conn = self
             .endpoint
