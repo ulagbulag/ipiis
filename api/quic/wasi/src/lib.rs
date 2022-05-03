@@ -1,3 +1,5 @@
+pub extern crate ipiis_api_quic_common as common;
+
 use core::pin::Pin;
 
 use ipiis_api_quic_common::{opcode::Opcode, Ipiis};
