@@ -3,9 +3,10 @@ use std::net::SocketAddr;
 
 use ipiis_api_quic_common::{
     arp::{ArpRequest, ArpResponse},
+    cert,
     opcode::Opcode,
     rustls::{self, Certificate},
-    Ipiis, cert,
+    Ipiis,
 };
 use ipis::{
     async_trait::async_trait,
@@ -78,8 +79,9 @@ impl Ipiis for IpiisClient {
         self.account_me.account_ref()
     }
 
-    fn account_primary(&self) -> Option<AccountRef> {
+    fn account_primary(&self) -> Result<AccountRef> {
         self.account_primary
+            .ok_or_else(|| anyhow!("failed to get primary address"))
     }
 
     async fn call_raw<Req>(
@@ -128,11 +130,11 @@ impl IpiisClient {
         match self.address_db.get(target.as_bytes())? {
             Some(addr) => Ok(String::from_utf8(addr.to_vec())?.parse()?),
             None => match self.account_primary() {
-                Some(primary) => self
+                Ok(primary) => self
                     .call_deserialized(Opcode::ARP, &primary, &ArpRequest { target: *target })
                     .await
                     .map(|res: ArpResponse| res.addr),
-                None => bail!("failed to get address: {}", target.to_string()),
+                Err(e) => bail!("{}: failed to get address: {}", e, target.to_string()),
             },
         }
     }

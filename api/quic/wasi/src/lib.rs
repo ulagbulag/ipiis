@@ -31,7 +31,7 @@ impl Ipiis for IpiisClient {
         todo!()
     }
 
-    fn account_primary(&self) -> Option<AccountRef> {
+    fn account_primary(&self) -> Result<AccountRef> {
         todo!()
     }
 

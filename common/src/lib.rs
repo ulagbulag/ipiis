@@ -15,7 +15,7 @@ pub trait Ipiis {
 
     fn account_me(&self) -> AccountRef;
 
-    fn account_primary(&self) -> Option<AccountRef>;
+    fn account_primary(&self) -> Result<AccountRef>;
 
     async fn call<'res, Req, Res>(
         &self,
