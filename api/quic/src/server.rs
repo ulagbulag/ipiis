@@ -1,21 +1,22 @@
 use std::convert::Infallible;
 
-use futures::StreamExt;
+use futures::{Future, StreamExt};
+use ipiis_common::{Serializer, SERIALIZER_HEAP_SIZE};
 use ipis::{
     core::{
         account::{Account, AccountRef},
-        anyhow::Result,
+        anyhow::{anyhow, Result},
     },
+    log::error,
     tokio::io::AsyncReadExt,
 };
 use quinn::{Endpoint, ServerConfig};
+use rkyv::{Archive, Deserialize, Serialize};
 use rustls::Certificate;
-
-use crate::client::IpiisClient;
 
 pub struct IpiisServer {
     // TODO: remove this struct, rather implement `listen(port) -> Result<!>` directly
-    client: IpiisClient,
+    client: crate::client::IpiisClient,
     port: u16,
 }
 
@@ -27,7 +28,7 @@ impl IpiisServer {
         port: u16,
     ) -> Result<Self> {
         Ok(Self {
-            client: IpiisClient::with_address_db_path(
+            client: crate::client::IpiisClient::with_address_db_path(
                 account_me,
                 account_primary,
                 certs,
@@ -47,11 +48,16 @@ impl IpiisServer {
         ServerConfig::with_single_cert(cert_chain, priv_key).map_err(Into::into)
     }
 
-    pub async fn run(self) -> Result<Infallible> {
+    pub async fn run<Req, Res, F, Fut>(self, handler: F) -> Result<Infallible>
+    where
+        Res: Archive + Serialize<Serializer>,
+        F: Fn(Vec<u8>) -> Fut,
+        Fut: Future<Output = Result<Res>>,
+    {
         let server_config = self.get_server_config()?;
         let addr = format!("0.0.0.0:{}", self.port).parse()?;
 
-        let (endpoint, mut incoming) = Endpoint::server(server_config, addr)?;
+        let (_endpoint, mut incoming) = Endpoint::server(server_config, addr)?;
 
         loop {
             let quinn::NewConnection {
@@ -65,29 +71,59 @@ impl IpiisServer {
             );
 
             // Each stream initiated by the client constitutes a new request.
-            while let Some(stream) = bi_streams.next().await {
+            'stream: while let Some(stream) = bi_streams.next().await {
                 let (mut send, mut recv) = match stream {
                     Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
                         dbg!("connection closed");
-                        break;
+                        break 'stream;
                     }
                     Err(e) => {
-                        return Err(e.into());
+                        error!("connection error: {}", e);
+                        break 'stream;
                     }
                     Ok(s) => s,
                 };
 
-                dbg!("reading");
+                // recv opcode
                 let opcode = recv.read_u8().await?;
-                assert_eq!(opcode, crate::opcode::Opcode::TEXT.bits());
-                let data = recv.read_to_end(usize::MAX).await?;
-                assert_eq!(&data, &[0x00, 0x00, 0x01, 0x02]);
+                let buf = match crate::opcode::Opcode::from_bits(opcode) {
+                    Some(crate::opcode::Opcode::ARP) => {
+                        // recv data
+                        let req = recv.read_to_end(usize::MAX).await?;
 
-                dbg!("writing");
-                let data = "hello world!".to_string();
-                let data = ::ipis::rkyv::to_bytes::<_, 4096>(&data)?;
+                        // unpack data
+                        let req = ::ipis::rkyv::check_archived_root::<crate::arp::ArpRequest>(&req)
+                            .map_err(|_| anyhow!("failed to parse the received bytes"))?;
+                        let req: crate::arp::ArpRequest =
+                            req.deserialize(&mut ::rkyv::Infallible)?;
 
-                send.write_all(&data).await?;
+                        // handle data
+                        let res = crate::arp::ArpResponse {
+                            addr: self.client.get_address(&req.target).await?,
+                        };
+
+                        // pack data
+                        ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
+                    }
+                    Some(crate::opcode::Opcode::TEXT) => {
+                        // recv data
+                        let req = recv.read_to_end(usize::MAX).await?;
+
+                        // unpack & handle data
+                        let res = handler(req).await?;
+
+                        // pack data
+                        ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
+                    }
+                    //
+                    _ => {
+                        error!("unknown opcode: {:x}", opcode);
+                        break 'stream;
+                    }
+                };
+
+                // send response
+                send.write_all(&buf).await?;
                 send.finish().await?;
             }
         }

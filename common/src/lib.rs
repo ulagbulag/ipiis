@@ -81,7 +81,7 @@ pub trait Ipiis {
         let res = self.call::<Req, Res>(opcode, target, msg).await?;
         let res = res
             .check_archived_root()
-            .map_err(|_| anyhow!("failed to parse the received address"))?;
+            .map_err(|_| anyhow!("failed to parse the received bytes"))?;
         res.deserialize(deserializer).map_err(Into::into)
     }
 

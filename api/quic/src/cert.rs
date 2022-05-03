@@ -1,12 +1,13 @@
 use ipis::core::{
-    account::Account,
+    account::{Account, AccountRef},
     anyhow::{anyhow, Result},
-    ed25519_dalek::ed25519::{
-        pkcs8::{EncodePrivateKey, EncodePublicKey, PublicKeyBytes},
-        KeypairBytes,
-    },
+    ed25519_dalek::ed25519::{pkcs8::EncodePrivateKey, KeypairBytes},
 };
 use rustls::{Certificate, PrivateKey};
+
+pub fn get_name(account: &AccountRef) -> String {
+    format!("{}.ipiis", account.to_string())
+}
 
 pub fn generate(account: &Account) -> Result<(PrivateKey, Vec<Certificate>)> {
     let keypair = KeypairBytes::from_bytes(&account.to_bytes())
@@ -19,7 +20,7 @@ pub fn generate(account: &Account) -> Result<(PrivateKey, Vec<Certificate>)> {
     keypair.insert(48, 35);
     keypair.insert(48, 161);
 
-    let mut params = ::rcgen::CertificateParams::new(vec!["localhost".into()]);
+    let mut params = ::rcgen::CertificateParams::new(vec![get_name(&account.account_ref())]);
     params.alg = &::rcgen::PKCS_ED25519;
     params.key_pair = Some(::rcgen::KeyPair::from_der(&keypair).unwrap());
 

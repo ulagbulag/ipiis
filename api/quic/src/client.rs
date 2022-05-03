@@ -98,7 +98,6 @@ impl Ipiis for IpiisClient {
             .map_err(|e| anyhow!("failed to open stream: {}", e))?;
 
         // send opcode
-        dbg!("writing");
         send.write_u8(opcode.bits()).await?;
 
         // send data
@@ -107,10 +106,9 @@ impl Ipiis for IpiisClient {
             .map_err(|e| anyhow!("failed to send request: {}", e))?;
 
         // finish sending
-        send.flush()
+        send.finish()
             .await
             .map_err(|e| anyhow!("failed to shutdown stream: {}", e))?;
-        dbg!("writing finished");
 
         // be ready for receiving
         Ok(Box::pin(recv))
@@ -125,7 +123,7 @@ impl IpiisClient {
             .map_err(Into::into)
     }
 
-    async fn get_address(&self, target: &AccountRef) -> Result<SocketAddr> {
+    pub(crate) async fn get_address(&self, target: &AccountRef) -> Result<SocketAddr> {
         match self.address_db.get(target.as_bytes())? {
             Some(addr) => Ok(String::from_utf8(addr.to_vec())?.parse()?),
             None => match self.account_primary() {
@@ -145,12 +143,11 @@ impl IpiisClient {
 
     async fn get_connection(&self, target: &AccountRef) -> Result<Connection> {
         let addr = self.get_address(target).await?;
-        dbg!(&addr);
-        let server_name = "localhost";
+        let server_name = crate::cert::get_name(target);
 
         let new_conn = self
             .endpoint
-            .connect(addr, server_name)?
+            .connect(addr, &server_name)?
             .await
             .map_err(|e| anyhow!("failed to connect: {}", e))?;
 
