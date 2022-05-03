@@ -4,13 +4,11 @@ use std::marker::PhantomData;
 use ipis::{
     async_trait::async_trait,
     bytecheck::CheckBytes,
-    core::{
-        account::AccountRef,
-        anyhow::{anyhow, Result},
-    },
+    core::{account::AccountRef, anyhow::Result},
+    pin::PinnedInner,
     rkyv::{
         validation::{validators::DefaultValidator, CheckTypeError},
-        Archive, Deserialize, Fallible, Serialize,
+        Archive, Deserialize, Infallible, Serialize,
     },
     tokio::io::{AsyncRead, AsyncReadExt},
 };
@@ -64,25 +62,25 @@ pub trait Ipiis {
         })
     }
 
-    async fn call_deserialized<Req, Res, D>(
+    async fn call_deserialized<Req, Res>(
         &self,
         opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: &Req,
-        deserializer: &mut D,
     ) -> Result<Res>
     where
         Req: Serialize<Serializer> + Send + Sync,
         Res: Archive + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>> + Deserialize<Res, D>,
-        D: Fallible + Send + ?Sized,
-        <D as Fallible>::Error: ::std::error::Error + Send + Sync,
+        <Res as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + Deserialize<Res, Infallible>,
     {
-        let res = self.call::<Req, Res>(opcode, target, msg).await?;
-        let res = res
-            .check_archived_root()
-            .map_err(|_| anyhow!("failed to parse the received bytes"))?;
-        res.deserialize(deserializer).map_err(Into::into)
+        let msg = ::ipis::rkyv::to_bytes(msg)?;
+        let hint = Some(::core::mem::size_of::<Res>());
+
+        let bytes = self
+            .call_raw_to_end(opcode, target, &mut msg.as_ref(), hint)
+            .await?;
+        PinnedInner::<Res>::new(bytes)?.deserialize_into()
     }
 
     async fn call_raw<Req>(

@@ -1,5 +1,6 @@
-use std::convert::Infallible;
+use core::convert::Infallible;
 
+use bytecheck::CheckBytes;
 use futures::{Future, StreamExt};
 use ipiis_common::{Serializer, SERIALIZER_HEAP_SIZE};
 use ipis::{
@@ -8,10 +9,11 @@ use ipis::{
         anyhow::{anyhow, Result},
     },
     log::error,
+    pin::{Pinned, PinnedInner},
     tokio::io::AsyncReadExt,
 };
 use quinn::{Endpoint, ServerConfig};
-use rkyv::{Archive, Deserialize, Serialize};
+use rkyv::{validation::validators::DefaultValidator, Archive, Deserialize, Serialize};
 use rustls::Certificate;
 
 pub struct IpiisServer {
@@ -50,8 +52,10 @@ impl IpiisServer {
 
     pub async fn run<Req, Res, F, Fut>(self, handler: F) -> Result<Infallible>
     where
+        Req: Archive,
+        <Req as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
         Res: Archive + Serialize<Serializer>,
-        F: Fn(Vec<u8>) -> Fut,
+        F: Fn(Pinned<Req>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
         let server_config = self.get_server_config()?;
@@ -108,6 +112,9 @@ impl IpiisServer {
                     Some(crate::opcode::Opcode::TEXT) => {
                         // recv data
                         let req = recv.read_to_end(usize::MAX).await?;
+
+                        // unpack data
+                        let req = PinnedInner::new(req)?;
 
                         // unpack & handle data
                         let res = handler(req).await?;

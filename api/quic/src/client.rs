@@ -11,7 +11,6 @@ use ipis::{
     tokio::io::{AsyncRead, AsyncWriteExt},
 };
 use quinn::{Connection, Endpoint};
-use rkyv::Infallible;
 use rustls::Certificate;
 
 use crate::arp::ArpResponse;
@@ -132,7 +131,6 @@ impl IpiisClient {
                         crate::opcode::Opcode::ARP,
                         &primary,
                         &crate::arp::ArpRequest { target: *target },
-                        &mut Infallible,
                     )
                     .await
                     .map(|res: ArpResponse| res.addr),

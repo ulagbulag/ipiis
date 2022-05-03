@@ -5,11 +5,12 @@ use ipis::{
     class::Class,
     core::{
         account::{Account, AccountRef},
-        anyhow::{anyhow, Result},
+        anyhow::Result,
         signature::Keypair,
     },
+    pin::Pinned,
 };
-use rkyv::{Archive, Deserialize, Infallible, Serialize};
+use rkyv::{Archive, Deserialize, Serialize};
 use rustls::Certificate;
 
 #[tokio::main]
@@ -27,7 +28,7 @@ async fn main() -> Result<()> {
     for _ in 0..5 {
         // recv data
         let res: String = client
-            .call_deserialized(Opcode::TEXT, &server, &req, &mut Infallible)
+            .call_deserialized(Opcode::TEXT, &server, &req)
             .await?;
 
         // verify data
@@ -71,11 +72,7 @@ pub struct Request {
     age: u32,
 }
 
-async fn handle(bytes: Vec<u8>) -> Result<String> {
-    // unpack data
-    let req = ::ipis::rkyv::check_archived_root::<Request>(&bytes)
-        .map_err(|_| anyhow!("failed to parse the received bytes"))?;
-
+async fn handle(req: Pinned<Request>) -> Result<String> {
     // handle data
     let res = format!("hello, {} years old {}!", &req.name, req.age);
 
