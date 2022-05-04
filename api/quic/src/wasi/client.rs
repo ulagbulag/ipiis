@@ -1,15 +1,13 @@
-pub extern crate ipiis_api_quic_common as common;
-
 use core::pin::Pin;
 
-use ipiis_api_quic_common::{opcode::Opcode, Ipiis};
+use ipiis_common::Ipiis;
 use ipis::{
     async_trait::async_trait,
     core::{account::AccountRef, anyhow::Result},
     tokio::io::AsyncRead,
 };
 
-mod intrinsics;
+use crate::common::opcode::Opcode;
 
 pub struct IpiisClient {
     cid: u64,
@@ -18,7 +16,7 @@ pub struct IpiisClient {
 impl IpiisClient {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            cid: unsafe { crate::intrinsics::ipiis_client_new() },
+            cid: unsafe { super::intrinsics::ipiis_client_new() },
         })
     }
 }

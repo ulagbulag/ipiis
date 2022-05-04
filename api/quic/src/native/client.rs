@@ -1,13 +1,7 @@
 use core::pin::Pin;
 use std::net::SocketAddr;
 
-use ipiis_api_quic_common::{
-    arp::{ArpRequest, ArpResponse},
-    cert,
-    opcode::Opcode,
-    rustls::{self, Certificate},
-    Ipiis,
-};
+use ipiis_common::Ipiis;
 use ipis::{
     async_trait::async_trait,
     core::{
@@ -17,6 +11,13 @@ use ipis::{
     tokio::io::{AsyncRead, AsyncWriteExt},
 };
 use quinn::{Connection, Endpoint};
+use rustls::Certificate;
+
+use crate::common::{
+    arp::{ArpRequest, ArpResponse},
+    cert,
+    opcode::Opcode,
+};
 
 pub struct IpiisClient {
     pub(crate) account_me: Account,

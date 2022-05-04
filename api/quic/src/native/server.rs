@@ -1,13 +1,7 @@
 use core::convert::Infallible;
 
 use futures::{Future, StreamExt};
-use ipiis_api_quic_common::{
-    arp::{ArpRequest, ArpResponse},
-    cert,
-    opcode::Opcode,
-    rustls::Certificate,
-    Serializer, SERIALIZER_HEAP_SIZE,
-};
+use ipiis_common::{Serializer, SERIALIZER_HEAP_SIZE};
 use ipis::{
     bytecheck::CheckBytes,
     core::{
@@ -21,6 +15,13 @@ use ipis::{
 };
 use quinn::{Endpoint, ServerConfig};
 use rkyv::{validation::validators::DefaultValidator, Archive, Deserialize, Serialize};
+use rustls::Certificate;
+
+use crate::common::{
+    arp::{ArpRequest, ArpResponse},
+    cert,
+    opcode::Opcode,
+};
 
 pub struct IpiisServer {
     // TODO: remove this struct, rather implement `listen(port) -> Result<!>` directly

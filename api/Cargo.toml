@@ -5,8 +5,5 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[target.'cfg(not(target_os = "wasi"))'.dependencies]
-ipiis-api-quic-native = { path = "./quic/native" }
-
-[target.'cfg(target_os = "wasi")'.dependencies]
-ipiis-api-quic-wasi = { path = "./quic/wasi" }
+[dependencies]
+ipiis-api-quic = { path = "./quic" }
