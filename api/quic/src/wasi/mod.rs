@@ -1,4 +1,2 @@
-mod client;
+pub mod client;
 mod intrinsics;
-
-pub use self::client::*;

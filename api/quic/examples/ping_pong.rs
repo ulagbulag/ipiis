@@ -1,8 +1,9 @@
 use bytecheck::CheckBytes;
 use ipiis_api_quic::{
+    client::IpiisClient,
     common::{opcode::Opcode, Ipiis},
     rustls::Certificate,
-    IpiisClient, IpiisServer,
+    server::IpiisServer,
 };
 use ipis::{
     class::Class,
