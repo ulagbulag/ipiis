@@ -5,7 +5,7 @@ use ipiis_common::Ipiis;
 use ipis::{
     async_trait::async_trait,
     core::{
-        account::{Account, AccountRef},
+        account::{Account, AccountRef, GuaranteeSigned},
         anyhow::{anyhow, bail, Result},
     },
     tokio::io::{AsyncRead, AsyncWriteExt},
@@ -76,8 +76,8 @@ impl IpiisClient {
 impl Ipiis for IpiisClient {
     type Opcode = Opcode;
 
-    fn account_me(&self) -> AccountRef {
-        self.account_me.account_ref()
+    fn account_me(&self) -> &Account {
+        &self.account_me
     }
 
     fn account_primary(&self) -> Result<AccountRef> {
@@ -132,9 +132,13 @@ impl IpiisClient {
             Some(addr) => Ok(String::from_utf8(addr.to_vec())?.parse()?),
             None => match self.account_primary() {
                 Ok(primary) => self
-                    .call_deserialized(Opcode::ARP, &primary, &ArpRequest { target: *target })
+                    .call_permanent_deserialized(
+                        Opcode::ARP,
+                        &primary,
+                        ArpRequest { target: *target },
+                    )
                     .await
-                    .map(|res: ArpResponse| res.addr),
+                    .map(|res: GuaranteeSigned<ArpResponse>| res.addr),
                 Err(e) => bail!("{}: failed to get address: {}", e, target.to_string()),
             },
         }

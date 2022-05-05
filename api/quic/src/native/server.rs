@@ -5,8 +5,11 @@ use ipiis_common::{Serializer, SERIALIZER_HEAP_SIZE};
 use ipis::{
     bytecheck::CheckBytes,
     core::{
-        account::{Account, AccountRef},
+        account::{Account, AccountRef, GuaranteeSigned, Verifier},
         anyhow::{anyhow, Result},
+        metadata::Metadata,
+        signature::SignatureSerializer,
+        value::chrono::DateTime,
     },
     log::error,
     pin::{Pinned, PinnedInner},
@@ -14,7 +17,10 @@ use ipis::{
     tokio::io::AsyncReadExt,
 };
 use quinn::{Endpoint, ServerConfig};
-use rkyv::{validation::validators::DefaultValidator, Archive, Deserialize, Serialize};
+use rkyv::{
+    de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
+    Deserialize, Serialize,
+};
 use rustls::Certificate;
 
 use crate::common::{
@@ -59,10 +65,16 @@ impl IpiisServer {
 
     pub async fn run<Req, Res, F, Fut>(self, handler: F) -> Result<Infallible>
     where
-        Req: Archive,
-        <Req as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>,
-        Res: Archive + Serialize<Serializer>,
-        F: Fn(Pinned<Req>) -> Fut,
+        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
+        <Req as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
+        Res: Archive
+            + Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq,
+        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
         let server_config = self.get_server_config()?;
@@ -103,13 +115,18 @@ impl IpiisServer {
                         let req = recv.read_to_end(usize::MAX).await?;
 
                         // unpack data
-                        let req = ::ipis::rkyv::check_archived_root::<ArpRequest>(&req)
-                            .map_err(|_| anyhow!("failed to parse the received bytes"))?;
-                        let req: ArpRequest = req.deserialize(&mut rkyv::Infallible)?;
+                        let req =
+                            ::ipis::rkyv::check_archived_root::<GuaranteeSigned<ArpRequest>>(&req)
+                                .map_err(|_| anyhow!("failed to parse the received bytes"))?;
+                        let req: GuaranteeSigned<ArpRequest> =
+                            req.deserialize(&mut SharedDeserializeMap::default())?;
+
+                        // verify data
+                        let () = req.verify(Some(self.client.account_me.account_ref()))?;
 
                         // handle data
                         let res = ArpResponse {
-                            addr: self.client.get_address(&req.target).await?,
+                            addr: self.client.get_address(&req.data.data.target).await?,
                         };
 
                         // pack data
@@ -120,10 +137,32 @@ impl IpiisServer {
                         let req = recv.read_to_end(usize::MAX).await?;
 
                         // unpack data
-                        let req = PinnedInner::new(req)?;
+                        let req = PinnedInner::<GuaranteeSigned<Req>>::new(req)?;
+                        let guarantee: AccountRef = req
+                            .guarantee
+                            .account
+                            .deserialize(&mut SharedDeserializeMap::default())?;
+                        let expiration_date: Option<DateTime> = req
+                            .data
+                            .expiration_date
+                            .deserialize(&mut SharedDeserializeMap::default())?;
 
-                        // unpack & handle data
+                        // verify data
+                        let () = req.verify(Some(self.client.account_me.account_ref()))?;
+
+                        // handle data
                         let res = handler(req).await?;
+
+                        // sign data
+                        let res = {
+                            let mut builder = Metadata::builder();
+
+                            if let Some(expiration_date) = expiration_date {
+                                builder = builder.expiration_date(expiration_date);
+                            }
+
+                            builder.build(&self.client.account_me, guarantee, res)?
+                        };
 
                         // pack data
                         ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?

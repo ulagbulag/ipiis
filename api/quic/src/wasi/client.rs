@@ -3,7 +3,10 @@ use core::pin::Pin;
 use ipiis_common::Ipiis;
 use ipis::{
     async_trait::async_trait,
-    core::{account::AccountRef, anyhow::Result},
+    core::{
+        account::{Account, AccountRef},
+        anyhow::Result,
+    },
     tokio::io::AsyncRead,
 };
 
@@ -25,7 +28,7 @@ impl IpiisClient {
 impl Ipiis for IpiisClient {
     type Opcode = Opcode;
 
-    fn account_me(&self) -> AccountRef {
+    fn account_me(&self) -> &Account {
         todo!()
     }
 
