@@ -5,5 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["quic"]
+quic = ["ipiis-api-quic"]
+
 [dependencies]
-ipiis-api-quic = { path = "./quic" }
+ipiis-api-quic = { path = "./quic", optional = true }
