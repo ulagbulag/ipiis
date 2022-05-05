@@ -18,6 +18,7 @@ futures = "0.3"
 quinn = "0.8"
 rcgen = "0.9"
 rustls = "0.20"
+rustls-native-certs = "0.6"
 sled = "0.34"
 tempfile = "3.3"
 

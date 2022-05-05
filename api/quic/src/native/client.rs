@@ -8,6 +8,7 @@ use ipis::{
         account::{Account, AccountRef, GuaranteeSigned},
         anyhow::{anyhow, bail, Result},
     },
+    env::infer,
     tokio::io::{AsyncRead, AsyncWriteExt},
 };
 use quinn::{Connection, Endpoint};
@@ -28,6 +29,17 @@ pub struct IpiisClient {
 }
 
 impl IpiisClient {
+    pub fn infer() -> Result<Self> {
+        let account_me = infer("ipis_account_me")?;
+        let account_primary = infer("ipiis_client_account_primary").ok();
+        let certs = ::rustls_native_certs::load_native_certs()?
+            .into_iter()
+            .map(|e| Certificate(e.0))
+            .collect::<Vec<_>>();
+
+        Self::new(account_me, account_primary, certs.as_slice())
+    }
+
     pub fn new(
         account_me: Account,
         account_primary: Option<AccountRef>,
