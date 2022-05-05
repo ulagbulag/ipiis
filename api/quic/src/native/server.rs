@@ -11,6 +11,7 @@ use ipis::{
         signature::SignatureSerializer,
         value::chrono::DateTime,
     },
+    env::infer,
     log::error,
     pin::{Pinned, PinnedInner},
     rkyv,
@@ -23,10 +24,13 @@ use rkyv::{
 };
 use rustls::Certificate;
 
-use crate::common::{
-    arp::{ArpRequest, ArpResponse},
-    cert,
-    opcode::Opcode,
+use crate::{
+    client::IpiisClient,
+    common::{
+        arp::{ArpRequest, ArpResponse},
+        cert,
+        opcode::Opcode,
+    },
 };
 
 pub struct IpiisServer {
@@ -36,6 +40,13 @@ pub struct IpiisServer {
 }
 
 impl IpiisServer {
+    pub fn infer() -> Result<Self> {
+        Ok(Self {
+            client: IpiisClient::infer()?,
+            port: infer("ipiis_server_port")?,
+        })
+    }
+
     pub fn new(
         account_me: Account,
         account_primary: Option<AccountRef>,
