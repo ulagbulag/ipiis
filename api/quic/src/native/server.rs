@@ -39,6 +39,14 @@ pub struct IpiisServer {
     port: u16,
 }
 
+impl ::core::ops::Deref for IpiisServer {
+    type Target = crate::client::IpiisClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.client
+    }
+}
+
 impl IpiisServer {
     pub fn infer() -> Result<Self> {
         Ok(Self {
@@ -88,10 +96,10 @@ impl IpiisServer {
         F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
-        let server_config = self.get_server_config()?;
+        let config = self.get_server_config()?;
         let addr = format!("0.0.0.0:{}", self.port).parse()?;
 
-        let (_endpoint, mut incoming) = Endpoint::server(server_config, addr)?;
+        let (_endpoint, mut incoming) = Endpoint::server(config, addr)?;
 
         loop {
             let quinn::NewConnection {

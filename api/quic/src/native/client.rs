@@ -74,8 +74,9 @@ impl IpiisClient {
                 }
 
                 let config = ::quinn::ClientConfig::with_root_certificates(cert_store);
+                let addr = "0.0.0.0:0".parse()?;
 
-                let mut endpoint = Endpoint::client("0.0.0.0:0".parse()?)?;
+                let mut endpoint = Endpoint::client(addr)?;
                 endpoint.set_default_client_config(config);
 
                 endpoint
