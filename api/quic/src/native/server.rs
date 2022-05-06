@@ -47,11 +47,12 @@ impl ::core::ops::Deref for IpiisServer {
     }
 }
 
+#[async_trait]
 impl<'a> Infer<'a> for IpiisServer {
     type GenesisArgs = u16;
     type GenesisResult = (Self, Vec<Certificate>);
 
-    fn infer() -> Result<Self> {
+    fn try_infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_server_account_primary").ok();
         let certs = ::rustls_native_certs::load_native_certs()?
@@ -119,7 +120,27 @@ impl IpiisServer {
         cert::generate(&self.client.account_me).map(|(_, e)| e)
     }
 
-    pub async fn run<Req, Res, F, Fut>(&self, handler: F) -> Result<Infallible>
+    pub async fn run<Req, Res, F, Fut>(&self, handler: F)
+    where
+        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
+        <Req as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
+        Res: Archive
+            + Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq,
+        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
+        Fut: Future<Output = Result<Res>>,
+    {
+        match self.try_run(handler).await {
+            Ok(_) => (),
+            Err(e) => error!("{}", e),
+        }
+    }
+
+    pub async fn try_run<Req, Res, F, Fut>(&self, handler: F) -> Result<Infallible>
     where
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:

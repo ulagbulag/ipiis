@@ -28,11 +28,12 @@ pub struct IpiisClient {
     endpoint: Endpoint,
 }
 
+#[async_trait]
 impl<'a> Infer<'a> for IpiisClient {
     type GenesisArgs = (Option<AccountRef>, &'a [Certificate]);
     type GenesisResult = Self;
 
-    fn infer() -> Result<Self> {
+    fn try_infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_client_account_primary").ok();
         let certs = ::rustls_native_certs::load_native_certs()?

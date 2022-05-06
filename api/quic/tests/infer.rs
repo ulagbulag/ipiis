@@ -11,7 +11,7 @@ async fn test_client() {
     ::std::env::set_var("ipis_account_me", account.to_string());
 
     // try creating a client
-    let client = IpiisClient::infer().unwrap();
+    let client = IpiisClient::infer();
 
     // compare the accounts
     assert_eq!(account.to_string(), client.account_me().to_string());
