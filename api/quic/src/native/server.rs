@@ -15,7 +15,7 @@ use ipis::{
     log::error,
     pin::{Pinned, PinnedInner},
     rkyv,
-    tokio::io::AsyncReadExt,
+    tokio::{io::AsyncReadExt, sync::Mutex},
 };
 use quinn::{Endpoint, Incoming, ServerConfig};
 use rkyv::{
@@ -32,7 +32,7 @@ use crate::common::{
 
 pub struct IpiisServer {
     client: crate::client::IpiisClient,
-    incoming: Incoming,
+    incoming: Mutex<Incoming>,
 }
 
 impl ::core::ops::Deref for IpiisServer {
@@ -91,7 +91,7 @@ impl IpiisServer {
                 "ipiis_server_address_db",
                 endpoint,
             )?,
-            incoming,
+            incoming: Mutex::new(incoming),
         })
     }
 
@@ -99,7 +99,7 @@ impl IpiisServer {
         cert::generate(&self.client.account_me).map(|(_, e)| e)
     }
 
-    pub async fn run<Req, Res, F, Fut>(mut self, handler: F) -> Result<Infallible>
+    pub async fn run<Req, Res, F, Fut>(&self, handler: F) -> Result<Infallible>
     where
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
@@ -113,12 +113,14 @@ impl IpiisServer {
         F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
+        let mut incoming = self.incoming.lock().await;
+
         loop {
             let quinn::NewConnection {
                 connection: conn,
                 mut bi_streams,
                 ..
-            } = self.incoming.next().await.unwrap().await.unwrap();
+            } = incoming.next().await.unwrap().await.unwrap();
             println!(
                 "[server] incoming connection: addr={}",
                 conn.remote_address(),

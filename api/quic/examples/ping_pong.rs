@@ -66,7 +66,7 @@ async fn run_server(port: u16) -> Result<(AccountRef, Vec<Certificate>)> {
     let certs = server.get_cert_chain()?;
 
     // accept a single connection
-    tokio::spawn(server.run(handle));
+    tokio::spawn(async move { server.run(handle).await });
 
     Ok((public_key, certs))
 }
