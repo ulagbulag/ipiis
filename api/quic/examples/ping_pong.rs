@@ -13,6 +13,7 @@ use ipis::{
         account::{AccountRef, GuaranteeSigned},
         anyhow::Result,
     },
+    env::Infer,
     pin::Pinned,
 };
 use rkyv::{Archive, Deserialize, Serialize};
@@ -53,7 +54,7 @@ async fn run_client(server: AccountRef, certs: &[Certificate], port: u16) -> Res
 
 async fn run_server(port: u16) -> Result<(AccountRef, Vec<Certificate>)> {
     // init a server
-    let (server, certs) = IpiisServer::genesis(port)?;
+    let (server, certs) = IpiisServer::genesis(&port)?;
     let public_key = server.account_me().account_ref();
 
     // accept a single connection

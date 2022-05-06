@@ -29,6 +29,9 @@ pub struct IpiisClient {
 }
 
 impl Infer for IpiisClient {
+    type GenesisArgs = [Certificate];
+    type GenesisResult = Self;
+
     fn infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_client_account_primary").ok();
@@ -38,6 +41,14 @@ impl Infer for IpiisClient {
             .collect::<Vec<_>>();
 
         Self::new(account_me, account_primary, certs.as_slice())
+    }
+
+    fn genesis(certs: &<Self as Infer>::GenesisArgs) -> Result<<Self as Infer>::GenesisResult> {
+        // generate an account
+        let account = Account::generate();
+
+        // init a server
+        Self::new(account, None, certs)
     }
 }
 
@@ -68,14 +79,6 @@ impl IpiisClient {
             "ipiis_client_address_db",
             endpoint,
         )
-    }
-
-    pub fn genesis(certs: &[Certificate]) -> Result<Self> {
-        // generate an account
-        let account = Account::generate();
-
-        // init a server
-        Self::new(account, None, certs)
     }
 
     pub(crate) fn with_address_db_path<P>(

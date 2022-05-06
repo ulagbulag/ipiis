@@ -44,6 +44,9 @@ impl ::core::ops::Deref for IpiisServer {
 }
 
 impl Infer for IpiisServer {
+    type GenesisArgs = u16;
+    type GenesisResult = (Self, Vec<Certificate>);
+
     fn infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_server_account_primary").ok();
@@ -54,6 +57,17 @@ impl Infer for IpiisServer {
         let account_port = infer("ipiis_server_port")?;
 
         Self::new(account_me, account_primary, &certs, account_port)
+    }
+
+    fn genesis(port: &<Self as Infer>::GenesisArgs) -> Result<<Self as Infer>::GenesisResult> {
+        // generate an account
+        let account = Account::generate();
+
+        // init a server
+        let server = Self::new(account, None, &[], *port)?;
+        let certs = server.get_cert_chain()?;
+
+        Ok((server, certs))
     }
 }
 
@@ -93,17 +107,6 @@ impl IpiisServer {
             )?,
             incoming: Mutex::new(incoming),
         })
-    }
-
-    pub fn genesis(port: u16) -> Result<(Self, Vec<Certificate>)> {
-        // generate an account
-        let account = Account::generate();
-
-        // init a server
-        let server = Self::new(account, None, &[], port)?;
-        let certs = server.get_cert_chain()?;
-
-        Ok((server, certs))
     }
 
     pub fn get_cert_chain(&self) -> Result<Vec<Certificate>> {
