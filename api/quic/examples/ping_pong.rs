@@ -47,14 +47,14 @@ async fn main() -> Result<()> {
 
 async fn run_client(server: AccountRef, certs: &[Certificate], port: u16) -> Result<IpiisClient> {
     // init a client
-    let client = IpiisClient::genesis(certs)?;
+    let client = IpiisClient::genesis((None, certs))?;
     client.add_address(server, format!("127.0.0.1:{}", port).parse()?)?;
     Ok(client)
 }
 
 async fn run_server(port: u16) -> Result<(AccountRef, Vec<Certificate>)> {
     // init a server
-    let (server, certs) = IpiisServer::genesis(&port)?;
+    let (server, certs) = IpiisServer::genesis(port)?;
     let public_key = server.account_me().account_ref();
 
     // accept a single connection

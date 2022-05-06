@@ -43,7 +43,7 @@ impl ::core::ops::Deref for IpiisServer {
     }
 }
 
-impl Infer for IpiisServer {
+impl<'a> Infer<'a> for IpiisServer {
     type GenesisArgs = u16;
     type GenesisResult = (Self, Vec<Certificate>);
 
@@ -59,12 +59,14 @@ impl Infer for IpiisServer {
         Self::new(account_me, account_primary, &certs, account_port)
     }
 
-    fn genesis(port: &<Self as Infer>::GenesisArgs) -> Result<<Self as Infer>::GenesisResult> {
+    fn genesis(
+        port: <Self as Infer<'a>>::GenesisArgs,
+    ) -> Result<<Self as Infer<'a>>::GenesisResult> {
         // generate an account
         let account = Account::generate();
 
         // init a server
-        let server = Self::new(account, None, &[], *port)?;
+        let server = Self::new(account, None, &[], port)?;
         let certs = server.get_cert_chain()?;
 
         Ok((server, certs))

@@ -28,8 +28,8 @@ pub struct IpiisClient {
     endpoint: Endpoint,
 }
 
-impl Infer for IpiisClient {
-    type GenesisArgs = [Certificate];
+impl<'a> Infer<'a> for IpiisClient {
+    type GenesisArgs = (Option<AccountRef>, &'a [Certificate]);
     type GenesisResult = Self;
 
     fn infer() -> Result<Self> {
@@ -43,12 +43,14 @@ impl Infer for IpiisClient {
         Self::new(account_me, account_primary, certs.as_slice())
     }
 
-    fn genesis(certs: &<Self as Infer>::GenesisArgs) -> Result<<Self as Infer>::GenesisResult> {
+    fn genesis(
+        (account_primary, certs): <Self as Infer>::GenesisArgs,
+    ) -> Result<<Self as Infer<'a>>::GenesisResult> {
         // generate an account
         let account = Account::generate();
 
         // init a server
-        Self::new(account, None, certs)
+        Self::new(account, account_primary, certs)
     }
 }
 
