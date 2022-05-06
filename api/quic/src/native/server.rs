@@ -11,7 +11,7 @@ use ipis::{
         signature::SignatureSerializer,
         value::chrono::DateTime,
     },
-    env::infer,
+    env::{infer, Infer},
     log::error,
     pin::{Pinned, PinnedInner},
     rkyv,
@@ -43,8 +43,8 @@ impl ::core::ops::Deref for IpiisServer {
     }
 }
 
-impl IpiisServer {
-    pub fn infer() -> Result<Self> {
+impl Infer for IpiisServer {
+    fn infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_server_account_primary").ok();
         let certs = ::rustls_native_certs::load_native_certs()?
@@ -55,7 +55,9 @@ impl IpiisServer {
 
         Self::new(account_me, account_primary, &certs, account_port)
     }
+}
 
+impl IpiisServer {
     pub fn new(
         account_me: Account,
         account_primary: Option<AccountRef>,
