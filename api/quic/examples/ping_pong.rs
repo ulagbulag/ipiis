@@ -10,7 +10,7 @@ use ipiis_api_quic::{
 use ipis::{
     class::Class,
     core::{
-        account::{Account, AccountRef, GuaranteeSigned},
+        account::{AccountRef, GuaranteeSigned},
         anyhow::Result,
     },
     pin::Pinned,
@@ -45,25 +45,16 @@ async fn main() -> Result<()> {
 }
 
 async fn run_client(server: AccountRef, certs: &[Certificate], port: u16) -> Result<IpiisClient> {
-    // generate an account
-    let account = Account::generate();
-
     // init a client
-    let client = IpiisClient::new(account, None, certs)?;
+    let client = IpiisClient::genesis(certs)?;
     client.add_address(server, format!("127.0.0.1:{}", port).parse()?)?;
     Ok(client)
 }
 
 async fn run_server(port: u16) -> Result<(AccountRef, Vec<Certificate>)> {
-    // generate an account
-    let account = Account::generate();
-    let public_key = AccountRef {
-        public_key: account.public_key(),
-    };
-
     // init a server
-    let server = IpiisServer::new(account, None, &[], port)?;
-    let certs = server.get_cert_chain()?;
+    let (server, certs) = IpiisServer::genesis(port)?;
+    let public_key = server.account_me().account_ref();
 
     // accept a single connection
     tokio::spawn(async move { server.run(handle).await });

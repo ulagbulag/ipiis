@@ -95,6 +95,17 @@ impl IpiisServer {
         })
     }
 
+    pub fn genesis(port: u16) -> Result<(Self, Vec<Certificate>)> {
+        // generate an account
+        let account = Account::generate();
+
+        // init a server
+        let server = Self::new(account, None, &[], port)?;
+        let certs = server.get_cert_chain()?;
+
+        Ok((server, certs))
+    }
+
     pub fn get_cert_chain(&self) -> Result<Vec<Certificate>> {
         cert::generate(&self.client.account_me).map(|(_, e)| e)
     }

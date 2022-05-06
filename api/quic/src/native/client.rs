@@ -70,6 +70,14 @@ impl IpiisClient {
         )
     }
 
+    pub fn genesis(certs: &[Certificate]) -> Result<Self> {
+        // generate an account
+        let account = Account::generate();
+
+        // init a server
+        Self::new(account, None, certs)
+    }
+
     pub(crate) fn with_address_db_path<P>(
         account_me: Account,
         account_primary: Option<AccountRef>,
