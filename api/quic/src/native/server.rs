@@ -17,26 +17,22 @@ use ipis::{
     rkyv,
     tokio::io::AsyncReadExt,
 };
-use quinn::{Endpoint, ServerConfig};
+use quinn::{Endpoint, Incoming, ServerConfig};
 use rkyv::{
     de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
     Deserialize, Serialize,
 };
 use rustls::Certificate;
 
-use crate::{
-    client::IpiisClient,
-    common::{
-        arp::{ArpRequest, ArpResponse},
-        cert,
-        opcode::Opcode,
-    },
+use crate::common::{
+    arp::{ArpRequest, ArpResponse},
+    cert,
+    opcode::Opcode,
 };
 
 pub struct IpiisServer {
-    // TODO: remove this struct, rather implement `listen(port) -> Result<!>` directly
     client: crate::client::IpiisClient,
-    port: u16,
+    incoming: Incoming,
 }
 
 impl ::core::ops::Deref for IpiisServer {
@@ -49,10 +45,15 @@ impl ::core::ops::Deref for IpiisServer {
 
 impl IpiisServer {
     pub fn infer() -> Result<Self> {
-        Ok(Self {
-            client: IpiisClient::infer()?,
-            port: infer("ipiis_server_port")?,
-        })
+        let account_me = infer("ipis_account_me")?;
+        let account_primary = infer("ipiis_server_account_primary").ok();
+        let certs = ::rustls_native_certs::load_native_certs()?
+            .into_iter()
+            .map(|e| Certificate(e.0))
+            .collect::<Vec<_>>();
+        let account_port = infer("ipiis_server_port")?;
+
+        Self::new(account_me, account_primary, &certs, account_port)
     }
 
     pub fn new(
@@ -61,14 +62,34 @@ impl IpiisServer {
         certs: &[Certificate],
         port: u16,
     ) -> Result<Self> {
+        let (endpoint, incoming) = {
+            let mut cert_store = ::rustls::RootCertStore::empty();
+            for cert in certs {
+                cert_store.add(cert)?;
+            }
+
+            let client_config = ::quinn::ClientConfig::with_root_certificates(cert_store);
+            let server_config = {
+                let (priv_key, cert_chain) = cert::generate(&account_me)?;
+
+                ServerConfig::with_single_cert(cert_chain, priv_key)?
+            };
+            let addr = format!("0.0.0.0:{}", port).parse()?;
+
+            let (mut endpoint, incoming) = Endpoint::server(server_config, addr)?;
+            endpoint.set_default_client_config(client_config);
+
+            (endpoint, incoming)
+        };
+
         Ok(Self {
             client: crate::client::IpiisClient::with_address_db_path(
                 account_me,
                 account_primary,
-                certs,
                 "ipiis_server_address_db",
+                endpoint,
             )?,
-            port,
+            incoming,
         })
     }
 
@@ -76,13 +97,7 @@ impl IpiisServer {
         cert::generate(&self.client.account_me).map(|(_, e)| e)
     }
 
-    fn get_server_config(&self) -> Result<ServerConfig> {
-        let (priv_key, cert_chain) = cert::generate(&self.client.account_me)?;
-
-        ServerConfig::with_single_cert(cert_chain, priv_key).map_err(Into::into)
-    }
-
-    pub async fn run<Req, Res, F, Fut>(self, handler: F) -> Result<Infallible>
+    pub async fn run<Req, Res, F, Fut>(mut self, handler: F) -> Result<Infallible>
     where
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
@@ -96,17 +111,12 @@ impl IpiisServer {
         F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
-        let config = self.get_server_config()?;
-        let addr = format!("0.0.0.0:{}", self.port).parse()?;
-
-        let (_endpoint, mut incoming) = Endpoint::server(config, addr)?;
-
         loop {
             let quinn::NewConnection {
                 connection: conn,
                 mut bi_streams,
                 ..
-            } = incoming.next().await.unwrap().await.unwrap();
+            } = self.incoming.next().await.unwrap().await.unwrap();
             println!(
                 "[server] incoming connection: addr={}",
                 conn.remote_address(),

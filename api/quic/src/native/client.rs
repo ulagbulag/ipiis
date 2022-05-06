@@ -45,19 +45,34 @@ impl IpiisClient {
         account_primary: Option<AccountRef>,
         certs: &[Certificate],
     ) -> Result<Self> {
+        let endpoint = {
+            let mut cert_store = ::rustls::RootCertStore::empty();
+            for cert in certs {
+                cert_store.add(cert)?;
+            }
+
+            let client_config = ::quinn::ClientConfig::with_root_certificates(cert_store);
+            let addr = "0.0.0.0:0".parse()?;
+
+            let mut endpoint = Endpoint::client(addr)?;
+            endpoint.set_default_client_config(client_config);
+
+            endpoint
+        };
+
         Self::with_address_db_path(
             account_me,
             account_primary,
-            certs,
             "ipiis_client_address_db",
+            endpoint,
         )
     }
 
     pub(crate) fn with_address_db_path<P>(
         account_me: Account,
         account_primary: Option<AccountRef>,
-        certs: &[Certificate],
         path: P,
+        endpoint: Endpoint,
     ) -> Result<Self>
     where
         P: AsRef<::std::path::Path>,
@@ -67,20 +82,7 @@ impl IpiisClient {
             account_primary,
             // TODO: allow to store in specific directory
             address_db: sled::open(tempfile::tempdir()?.path().join(path))?,
-            endpoint: {
-                let mut cert_store = rustls::RootCertStore::empty();
-                for cert in certs {
-                    cert_store.add(cert)?;
-                }
-
-                let config = ::quinn::ClientConfig::with_root_certificates(cert_store);
-                let addr = "0.0.0.0:0".parse()?;
-
-                let mut endpoint = Endpoint::client(addr)?;
-                endpoint.set_default_client_config(config);
-
-                endpoint
-            },
+            endpoint,
         })
     }
 }
