@@ -14,6 +14,7 @@ use ipis::{
     },
     env::Infer,
     pin::Pinned,
+    tokio,
 };
 use rkyv::{Archive, Deserialize, Serialize};
 

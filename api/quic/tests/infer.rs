@@ -1,6 +1,6 @@
 use ipiis_api_quic::client::IpiisClient;
 use ipiis_common::Ipiis;
-use ipis::{core::account::Account, env::Infer};
+use ipis::{core::account::Account, env::Infer, tokio};
 
 #[tokio::test]
 async fn test_client() {

@@ -1,4 +1,3 @@
-use core::pin::Pin;
 use std::{net::SocketAddr, sync::Arc};
 
 use futures::{Future, StreamExt};
@@ -17,10 +16,7 @@ use ipis::{
     log::{error, info, warn},
     pin::{Pinned, PinnedInner},
     rkyv,
-    tokio::{
-        io::{AsyncRead, AsyncReadExt},
-        sync::Mutex,
-    },
+    tokio::{io::AsyncReadExt, sync::Mutex},
 };
 use quinn::{Endpoint, Incoming, IncomingBiStreams, ServerConfig};
 use rkyv::{
@@ -35,14 +31,8 @@ use crate::common::{
 };
 
 pub struct IpiisServer {
-    client: crate::client::IpiisClient,
+    pub(crate) client: crate::client::IpiisClient,
     incoming: Mutex<Incoming>,
-}
-
-impl AsRef<crate::client::IpiisClient> for IpiisServer {
-    fn as_ref(&self) -> &crate::client::IpiisClient {
-        &self.client
-    }
 }
 
 #[async_trait]
@@ -334,161 +324,5 @@ impl IpiisServer {
         send.write_all(&buf).await?;
         send.finish().await?;
         Ok(())
-    }
-}
-
-#[async_trait]
-impl Ipiis for IpiisServer {
-    type Opcode = Opcode;
-
-    fn account_me(&self) -> &Account {
-        self.client.account_me()
-    }
-
-    fn account_primary(&self) -> Result<AccountRef> {
-        self.client.account_primary()
-    }
-
-    fn sign<T>(&self, target: AccountRef, msg: T) -> Result<GuaranteeSigned<T>>
-    where
-        T: Archive + Serialize<SignatureSerializer> + Send,
-        <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-    {
-        self.client.sign(target, msg)
-    }
-
-    async fn call<'res, Req, Res>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        self.client.call(opcode, target, msg).await
-    }
-
-    async fn call_permanent<'res, Req, Res>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        self.client.call_permanent(opcode, target, msg).await
-    }
-
-    async fn call_deserialized<Req, Res>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-        GuaranteeSigned<Res>: Archive,
-        <GuaranteeSigned<Res> as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-    {
-        self.client.call_deserialized(opcode, target, msg).await
-    }
-
-    async fn call_permanent_deserialized<Req, Res>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        self.client
-            .call_permanent_deserialized(opcode, target, msg)
-            .await
-    }
-
-    async fn call_raw<Req>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: &mut Req,
-    ) -> Result<Pin<Box<dyn AsyncRead + Send>>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        self.client.call_raw(opcode, target, msg).await
-    }
-
-    async fn call_raw_exact<Req>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: &mut Req,
-        buf: &mut [u8],
-    ) -> Result<usize>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        self.client.call_raw_exact(opcode, target, msg, buf).await
-    }
-
-    async fn call_raw_to_end<Req>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: &mut Req,
-        hint: Option<usize>,
-    ) -> Result<Vec<u8>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        self.client.call_raw_to_end(opcode, target, msg, hint).await
     }
 }

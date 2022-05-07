@@ -20,6 +20,3 @@ rcgen = "0.9"
 rustls = { version = "0.20", features = ["dangerous_configuration"] }
 sled = "0.34"
 tempfile = "3.3"
-
-[target.'cfg(not(target_os = "wasi"))'.dev-dependencies]
-tokio = { version = "1.18", features = ["full"] }
