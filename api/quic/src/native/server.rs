@@ -1,4 +1,5 @@
-use core::{convert::Infallible, pin::Pin};
+use core::pin::Pin;
+use std::{net::SocketAddr, sync::Arc};
 
 use futures::{Future, StreamExt};
 use ipiis_common::{Ipiis, Serializer, SERIALIZER_HEAP_SIZE};
@@ -7,13 +8,13 @@ use ipis::{
     bytecheck::CheckBytes,
     core::{
         account::{Account, AccountRef, GuaranteeSigned, Verifier},
-        anyhow::{anyhow, Result},
+        anyhow::{anyhow, bail, Result},
         metadata::Metadata,
         signature::SignatureSerializer,
         value::chrono::DateTime,
     },
     env::{infer, Infer},
-    log::error,
+    log::{error, info, warn},
     pin::{Pinned, PinnedInner},
     rkyv,
     tokio::{
@@ -21,7 +22,7 @@ use ipis::{
         sync::Mutex,
     },
 };
-use quinn::{Endpoint, Incoming, ServerConfig};
+use quinn::{Endpoint, Incoming, IncomingBiStreams, ServerConfig};
 use rkyv::{
     de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
     Deserialize, Serialize,
@@ -35,7 +36,7 @@ use crate::common::{
 };
 
 pub struct IpiisServer {
-    client: crate::client::IpiisClient,
+    client: Arc<crate::client::IpiisClient>,
     incoming: Mutex<Incoming>,
 }
 
@@ -111,7 +112,8 @@ impl IpiisServer {
                 account_primary,
                 "ipiis_server_address_db",
                 endpoint,
-            )?,
+            )?
+            .into(),
             incoming: Mutex::new(incoming),
         })
     }
@@ -131,16 +133,130 @@ impl IpiisServer {
             + ::core::fmt::Debug
             + PartialEq,
         <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
-        Fut: Future<Output = Result<Res>>,
+        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
+        Fut: Future<Output = Result<Res>> + Send,
     {
-        match self.try_run(handler).await {
-            Ok(_) => (),
-            Err(e) => error!("{}", e),
+        let mut incoming = self.incoming.lock().await;
+
+        while let Some(connection) = incoming.next().await {
+            match connection.await {
+                Ok(quinn::NewConnection {
+                    connection: conn,
+                    bi_streams,
+                    ..
+                }) => {
+                    let addr = conn.remote_address();
+                    info!("incoming connection: addr={}", addr);
+
+                    {
+                        let client = self.client.clone();
+
+                        // Each stream initiated by the client constitutes a new request.
+                        ::ipis::tokio::spawn(async move {
+                            Self::handle_connection(client, addr, bi_streams, handler).await
+                        });
+                    }
+                }
+                Err(e) => {
+                    warn!("incoming connection error: {}", e);
+                }
+            }
         }
     }
 
-    pub async fn try_run<Req, Res, F, Fut>(&self, handler: F) -> Result<Infallible>
+    async fn handle_connection<Req, Res, F, Fut>(
+        client: Arc<crate::client::IpiisClient>,
+        addr: SocketAddr,
+        bi_streams: IncomingBiStreams,
+        handler: F,
+    ) where
+        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
+        <Req as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
+        Res: Archive
+            + Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq,
+        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
+        Fut: Future<Output = Result<Res>> + Send,
+    {
+        match Self::try_handle_connection(client, addr, bi_streams, handler).await {
+            Ok(_) => (),
+            Err(e) => warn!("handling error: addr={}, {}", addr, e),
+        }
+    }
+
+    async fn try_handle_connection<Req, Res, F, Fut>(
+        client: Arc<crate::client::IpiisClient>,
+        addr: SocketAddr,
+        mut bi_streams: IncomingBiStreams,
+        handler: F,
+    ) -> Result<()>
+    where
+        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
+        <Req as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
+        Res: Archive
+            + Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq,
+        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
+        Fut: Future<Output = Result<Res>> + Send,
+    {
+        while let Some(stream) = bi_streams.next().await {
+            match stream {
+                Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
+                    info!("connection closed: addr={}", addr);
+                    break;
+                }
+                Err(e) => {
+                    bail!("connection error: {}", e);
+                }
+                Ok(stream) => {
+                    let client = client.clone();
+
+                    ::ipis::tokio::spawn(async move {
+                        Self::handle(client, addr, stream, handler).await
+                    });
+                }
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle<Req, Res, F, Fut>(
+        client: Arc<crate::client::IpiisClient>,
+        addr: SocketAddr,
+        stream: (quinn::SendStream, quinn::RecvStream),
+        handler: F,
+    ) where
+        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
+        <Req as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
+        Res: Archive
+            + Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq,
+        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
+        Fut: Future<Output = Result<Res>>,
+    {
+        match Self::try_handle(client, stream, handler).await {
+            Ok(_) => (),
+            Err(e) => error!("error handling: addr={}, {}", addr, e),
+        }
+    }
+
+    async fn try_handle<Req, Res, F, Fut>(
+        client: Arc<crate::client::IpiisClient>,
+        (mut send, mut recv): (::quinn::SendStream, ::quinn::RecvStream),
+        handler: F,
+    ) -> Result<()>
     where
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
@@ -154,105 +270,75 @@ impl IpiisServer {
         F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
-        let mut incoming = self.incoming.lock().await;
+        // recv opcode
+        let opcode = recv.read_u8().await?;
+        let buf = match Opcode::from_bits(opcode) {
+            Some(Opcode::ARP) => {
+                // recv data
+                let req = recv.read_to_end(usize::MAX).await?;
 
-        loop {
-            let quinn::NewConnection {
-                connection: conn,
-                mut bi_streams,
-                ..
-            } = incoming.next().await.unwrap().await.unwrap();
-            println!(
-                "[server] incoming connection: addr={}",
-                conn.remote_address(),
-            );
+                // unpack data
+                let req = ::ipis::rkyv::check_archived_root::<GuaranteeSigned<ArpRequest>>(&req)
+                    .map_err(|_| anyhow!("failed to parse the received bytes"))?;
+                let req: GuaranteeSigned<ArpRequest> =
+                    req.deserialize(&mut SharedDeserializeMap::default())?;
 
-            // Each stream initiated by the client constitutes a new request.
-            'stream: while let Some(stream) = bi_streams.next().await {
-                let (mut send, mut recv) = match stream {
-                    Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
-                        dbg!("connection closed");
-                        break 'stream;
-                    }
-                    Err(e) => {
-                        error!("connection error: {}", e);
-                        break 'stream;
-                    }
-                    Ok(s) => s,
+                // verify data
+                let () = req.verify(Some(client.account_me.account_ref()))?;
+
+                // handle data
+                let res = ArpResponse {
+                    addr: client.get_address(&req.data.data.target).await?,
                 };
 
-                // recv opcode
-                let opcode = recv.read_u8().await?;
-                let buf = match Opcode::from_bits(opcode) {
-                    Some(Opcode::ARP) => {
-                        // recv data
-                        let req = recv.read_to_end(usize::MAX).await?;
-
-                        // unpack data
-                        let req =
-                            ::ipis::rkyv::check_archived_root::<GuaranteeSigned<ArpRequest>>(&req)
-                                .map_err(|_| anyhow!("failed to parse the received bytes"))?;
-                        let req: GuaranteeSigned<ArpRequest> =
-                            req.deserialize(&mut SharedDeserializeMap::default())?;
-
-                        // verify data
-                        let () = req.verify(Some(self.client.account_me.account_ref()))?;
-
-                        // handle data
-                        let res = ArpResponse {
-                            addr: self.client.get_address(&req.data.data.target).await?,
-                        };
-
-                        // pack data
-                        ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
-                    }
-                    Some(Opcode::TEXT) => {
-                        // recv data
-                        let req = recv.read_to_end(usize::MAX).await?;
-
-                        // unpack data
-                        let req = PinnedInner::<GuaranteeSigned<Req>>::new(req)?;
-                        let guarantee: AccountRef = req
-                            .guarantee
-                            .account
-                            .deserialize(&mut SharedDeserializeMap::default())?;
-                        let expiration_date: Option<DateTime> = req
-                            .data
-                            .expiration_date
-                            .deserialize(&mut SharedDeserializeMap::default())?;
-
-                        // verify data
-                        let () = req.verify(Some(self.client.account_me.account_ref()))?;
-
-                        // handle data
-                        let res = handler(req).await?;
-
-                        // sign data
-                        let res = {
-                            let mut builder = Metadata::builder();
-
-                            if let Some(expiration_date) = expiration_date {
-                                builder = builder.expiration_date(expiration_date);
-                            }
-
-                            builder.build(&self.client.account_me, guarantee, res)?
-                        };
-
-                        // pack data
-                        ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
-                    }
-                    //
-                    _ => {
-                        error!("unknown opcode: {:x}", opcode);
-                        break 'stream;
-                    }
-                };
-
-                // send response
-                send.write_all(&buf).await?;
-                send.finish().await?;
+                // pack data
+                ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
             }
-        }
+            Some(Opcode::TEXT) => {
+                // recv data
+                let req = recv.read_to_end(usize::MAX).await?;
+
+                // unpack data
+                let req = PinnedInner::<GuaranteeSigned<Req>>::new(req)?;
+                let guarantee: AccountRef = req
+                    .guarantee
+                    .account
+                    .deserialize(&mut SharedDeserializeMap::default())?;
+                let expiration_date: Option<DateTime> = req
+                    .data
+                    .expiration_date
+                    .deserialize(&mut SharedDeserializeMap::default())?;
+
+                // verify data
+                let () = req.verify(Some(client.account_me.account_ref()))?;
+
+                // handle data
+                let res = handler(req).await?;
+
+                // sign data
+                let res = {
+                    let mut builder = Metadata::builder();
+
+                    if let Some(expiration_date) = expiration_date {
+                        builder = builder.expiration_date(expiration_date);
+                    }
+
+                    builder.build(&client.account_me, guarantee, res)?
+                };
+
+                // pack data
+                ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?
+            }
+            //
+            _ => {
+                bail!("unknown opcode: {:x}", opcode);
+            }
+        };
+
+        // send response
+        send.write_all(&buf).await?;
+        send.finish().await?;
+        Ok(())
     }
 }
 
