@@ -4,7 +4,6 @@ use bytecheck::CheckBytes;
 use ipiis_api_quic::{
     client::IpiisClient,
     common::{opcode::Opcode, Ipiis},
-    rustls::Certificate,
     server::IpiisServer,
 };
 use ipis::{
@@ -21,8 +20,8 @@ use rkyv::{Archive, Deserialize, Serialize};
 #[tokio::main]
 async fn main() -> Result<()> {
     // init peers
-    let (server, certs) = run_server(5001).await?;
-    let client = run_client(server, &certs, 5001).await?;
+    let server = run_server(5001).await?;
+    let client = run_client(server, 5001).await?;
 
     // create a data
     let req = Arc::new(Request {
@@ -45,23 +44,23 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_client(server: AccountRef, certs: &[Certificate], port: u16) -> Result<IpiisClient> {
+async fn run_client(server: AccountRef, port: u16) -> Result<IpiisClient> {
     // init a client
-    let client = IpiisClient::genesis((None, certs))?;
+    let client = IpiisClient::genesis(None)?;
     client.add_address(server, format!("127.0.0.1:{}", port).parse()?)?;
     Ok(client)
 }
 
-async fn run_server(port: u16) -> Result<(AccountRef, Vec<Certificate>)> {
+async fn run_server(port: u16) -> Result<AccountRef> {
     // init a server
-    let (server, certs) = IpiisServer::genesis(port)?;
+    let server = IpiisServer::genesis(port)?;
     let public_key = server.account_me().account_ref();
 
     // accept a single connection
     let server = Arc::new(server);
     tokio::spawn(async move { server.run(server.clone(), handle).await });
 
-    Ok((public_key, certs))
+    Ok(public_key)
 }
 
 #[derive(Class, Clone, Debug, PartialEq, Archive, Serialize, Deserialize)]

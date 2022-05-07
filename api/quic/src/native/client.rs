@@ -1,5 +1,5 @@
 use core::pin::Pin;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use ipiis_common::Ipiis;
 use ipis::{
@@ -12,7 +12,6 @@ use ipis::{
     tokio::io::{AsyncRead, AsyncWriteExt},
 };
 use quinn::{Connection, Endpoint};
-use rustls::Certificate;
 
 use crate::common::{
     arp::{ArpRequest, ArpResponse},
@@ -30,44 +29,36 @@ pub struct IpiisClient {
 
 #[async_trait]
 impl<'a> Infer<'a> for IpiisClient {
-    type GenesisArgs = (Option<AccountRef>, &'a [Certificate]);
+    type GenesisArgs = Option<AccountRef>;
     type GenesisResult = Self;
 
     fn try_infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_client_account_primary").ok();
-        let certs = ::rustls_native_certs::load_native_certs()?
-            .into_iter()
-            .map(|e| Certificate(e.0))
-            .collect::<Vec<_>>();
 
-        Self::new(account_me, account_primary, certs.as_slice())
+        Self::new(account_me, account_primary)
     }
 
     fn genesis(
-        (account_primary, certs): <Self as Infer>::GenesisArgs,
+        account_primary: <Self as Infer>::GenesisArgs,
     ) -> Result<<Self as Infer<'a>>::GenesisResult> {
         // generate an account
         let account = Account::generate();
 
         // init a server
-        Self::new(account, account_primary, certs)
+        Self::new(account, account_primary)
     }
 }
 
 impl IpiisClient {
-    pub fn new(
-        account_me: Account,
-        account_primary: Option<AccountRef>,
-        certs: &[Certificate],
-    ) -> Result<Self> {
+    pub fn new(account_me: Account, account_primary: Option<AccountRef>) -> Result<Self> {
         let endpoint = {
-            let mut cert_store = ::rustls::RootCertStore::empty();
-            for cert in certs {
-                cert_store.add(cert)?;
-            }
+            let crypto = ::rustls::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_custom_certificate_verifier(super::cert::ServerVerification::new())
+                .with_no_client_auth();
+            let client_config = ::quinn::ClientConfig::new(Arc::new(crypto));
 
-            let client_config = ::quinn::ClientConfig::with_root_certificates(cert_store);
             let addr = "0.0.0.0:0".parse()?;
 
             let mut endpoint = Endpoint::client(addr)?;

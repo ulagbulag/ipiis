@@ -9,7 +9,7 @@ pub fn get_name(account: &AccountRef) -> String {
     format!("{}.ipiis", account.to_string())
 }
 
-pub fn generate(account: &Account) -> Result<(PrivateKey, Vec<Certificate>)> {
+pub(crate) fn generate(account: &Account) -> Result<(PrivateKey, Vec<Certificate>)> {
     let keypair = KeypairBytes::from_bytes(&account.to_bytes())
         .to_pkcs8_der()
         .map_err(|_| anyhow!("failed to convert keypair to DER-encoded ASN.1"))?;

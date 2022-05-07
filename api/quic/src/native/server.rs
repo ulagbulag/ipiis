@@ -27,7 +27,6 @@ use rkyv::{
     de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
     Deserialize, Serialize,
 };
-use rustls::Certificate;
 
 use crate::common::{
     arp::{ArpRequest, ArpResponse},
@@ -49,18 +48,14 @@ impl AsRef<crate::client::IpiisClient> for IpiisServer {
 #[async_trait]
 impl<'a> Infer<'a> for IpiisServer {
     type GenesisArgs = u16;
-    type GenesisResult = (Self, Vec<Certificate>);
+    type GenesisResult = Self;
 
     fn try_infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_server_account_primary").ok();
-        let certs = ::rustls_native_certs::load_native_certs()?
-            .into_iter()
-            .map(|e| Certificate(e.0))
-            .collect::<Vec<_>>();
         let account_port = infer("ipiis_server_port")?;
 
-        Self::new(account_me, account_primary, &certs, account_port)
+        Self::new(account_me, account_primary, account_port)
     }
 
     fn genesis(
@@ -70,10 +65,9 @@ impl<'a> Infer<'a> for IpiisServer {
         let account = Account::generate();
 
         // init a server
-        let server = Self::new(account, None, &[], port)?;
-        let certs = server.get_cert_chain()?;
+        let server = Self::new(account, None, port)?;
 
-        Ok((server, certs))
+        Ok(server)
     }
 }
 
@@ -81,16 +75,15 @@ impl IpiisServer {
     pub fn new(
         account_me: Account,
         account_primary: Option<AccountRef>,
-        certs: &[Certificate],
         port: u16,
     ) -> Result<Self> {
         let (endpoint, incoming) = {
-            let mut cert_store = ::rustls::RootCertStore::empty();
-            for cert in certs {
-                cert_store.add(cert)?;
-            }
+            let crypto = ::rustls::ClientConfig::builder()
+                .with_safe_defaults()
+                .with_custom_certificate_verifier(super::cert::ServerVerification::new())
+                .with_no_client_auth();
+            let client_config = ::quinn::ClientConfig::new(Arc::new(crypto));
 
-            let client_config = ::quinn::ClientConfig::with_root_certificates(cert_store);
             let server_config = {
                 let (priv_key, cert_chain) = cert::generate(&account_me)?;
 
@@ -113,10 +106,6 @@ impl IpiisServer {
             )?,
             incoming: Mutex::new(incoming),
         })
-    }
-
-    pub fn get_cert_chain(&self) -> Result<Vec<Certificate>> {
-        cert::generate(&self.client.account_me).map(|(_, e)| e)
     }
 
     pub async fn run<C, Req, Res, F, Fut>(&self, client: Arc<C>, handler: F)
