@@ -58,7 +58,8 @@ async fn run_server(port: u16) -> Result<(AccountRef, Vec<Certificate>)> {
     let public_key = server.account_me().account_ref();
 
     // accept a single connection
-    tokio::spawn(async move { server.run(handle).await });
+    let server = Arc::new(server);
+    tokio::spawn(async move { server.run(server.clone(), handle).await });
 
     Ok((public_key, certs))
 }
@@ -71,7 +72,10 @@ pub struct Request {
     age: u32,
 }
 
-async fn handle(req: Pinned<GuaranteeSigned<Arc<Request>>>) -> Result<String> {
+async fn handle(
+    _server: Arc<IpiisServer>,
+    req: Pinned<GuaranteeSigned<Arc<Request>>>,
+) -> Result<String> {
     // resolve data
     let req = &req.data.data;
 

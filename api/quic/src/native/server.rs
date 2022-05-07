@@ -36,14 +36,12 @@ use crate::common::{
 };
 
 pub struct IpiisServer {
-    client: Arc<crate::client::IpiisClient>,
+    client: crate::client::IpiisClient,
     incoming: Mutex<Incoming>,
 }
 
-impl ::core::ops::Deref for IpiisServer {
-    type Target = crate::client::IpiisClient;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<crate::client::IpiisClient> for IpiisServer {
+    fn as_ref(&self) -> &crate::client::IpiisClient {
         &self.client
     }
 }
@@ -112,8 +110,7 @@ impl IpiisServer {
                 account_primary,
                 "ipiis_server_address_db",
                 endpoint,
-            )?
-            .into(),
+            )?,
             incoming: Mutex::new(incoming),
         })
     }
@@ -122,8 +119,9 @@ impl IpiisServer {
         cert::generate(&self.client.account_me).map(|(_, e)| e)
     }
 
-    pub async fn run<Req, Res, F, Fut>(&self, handler: F)
+    pub async fn run<C, Req, Res, F, Fut>(&self, client: Arc<C>, handler: F)
     where
+        C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
@@ -133,7 +131,7 @@ impl IpiisServer {
             + ::core::fmt::Debug
             + PartialEq,
         <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
+        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
         Fut: Future<Output = Result<Res>> + Send,
     {
         let mut incoming = self.incoming.lock().await;
@@ -149,9 +147,9 @@ impl IpiisServer {
                     info!("incoming connection: addr={}", addr);
 
                     {
-                        let client = self.client.clone();
-
                         // Each stream initiated by the client constitutes a new request.
+                        let client = client.clone();
+
                         ::ipis::tokio::spawn(async move {
                             Self::handle_connection(client, addr, bi_streams, handler).await
                         });
@@ -164,12 +162,13 @@ impl IpiisServer {
         }
     }
 
-    async fn handle_connection<Req, Res, F, Fut>(
-        client: Arc<crate::client::IpiisClient>,
+    async fn handle_connection<C, Req, Res, F, Fut>(
+        client: Arc<C>,
         addr: SocketAddr,
         bi_streams: IncomingBiStreams,
         handler: F,
     ) where
+        C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
@@ -179,7 +178,7 @@ impl IpiisServer {
             + ::core::fmt::Debug
             + PartialEq,
         <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
+        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
         Fut: Future<Output = Result<Res>> + Send,
     {
         match Self::try_handle_connection(client, addr, bi_streams, handler).await {
@@ -188,13 +187,14 @@ impl IpiisServer {
         }
     }
 
-    async fn try_handle_connection<Req, Res, F, Fut>(
-        client: Arc<crate::client::IpiisClient>,
+    async fn try_handle_connection<C, Req, Res, F, Fut>(
+        client: Arc<C>,
         addr: SocketAddr,
         mut bi_streams: IncomingBiStreams,
         handler: F,
     ) -> Result<()>
     where
+        C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
@@ -204,7 +204,7 @@ impl IpiisServer {
             + ::core::fmt::Debug
             + PartialEq,
         <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
+        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
         Fut: Future<Output = Result<Res>> + Send,
     {
         while let Some(stream) = bi_streams.next().await {
@@ -228,12 +228,13 @@ impl IpiisServer {
         Ok(())
     }
 
-    async fn handle<Req, Res, F, Fut>(
-        client: Arc<crate::client::IpiisClient>,
+    async fn handle<C, Req, Res, F, Fut>(
+        client: Arc<C>,
         addr: SocketAddr,
         stream: (quinn::SendStream, quinn::RecvStream),
         handler: F,
     ) where
+        C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
@@ -243,7 +244,7 @@ impl IpiisServer {
             + ::core::fmt::Debug
             + PartialEq,
         <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
+        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
         match Self::try_handle(client, stream, handler).await {
@@ -252,12 +253,13 @@ impl IpiisServer {
         }
     }
 
-    async fn try_handle<Req, Res, F, Fut>(
-        client: Arc<crate::client::IpiisClient>,
+    async fn try_handle<C, Req, Res, F, Fut>(
+        client: Arc<C>,
         (mut send, mut recv): (::quinn::SendStream, ::quinn::RecvStream),
         handler: F,
     ) -> Result<()>
     where
+        C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
         Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
         <Req as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
@@ -267,9 +269,13 @@ impl IpiisServer {
             + ::core::fmt::Debug
             + PartialEq,
         <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Pinned<GuaranteeSigned<Req>>) -> Fut,
+        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut,
         Fut: Future<Output = Result<Res>>,
     {
+        let ipiis_client: &crate::client::IpiisClient = client.as_ref().as_ref();
+        let account_me = ipiis_client.account_me();
+        let account_ref = account_me.account_ref();
+
         // recv opcode
         let opcode = recv.read_u8().await?;
         let buf = match Opcode::from_bits(opcode) {
@@ -284,11 +290,11 @@ impl IpiisServer {
                     req.deserialize(&mut SharedDeserializeMap::default())?;
 
                 // verify data
-                let () = req.verify(Some(client.account_me.account_ref()))?;
+                let () = req.verify(Some(account_ref))?;
 
                 // handle data
                 let res = ArpResponse {
-                    addr: client.get_address(&req.data.data.target).await?,
+                    addr: ipiis_client.get_address(&req.data.data.target).await?,
                 };
 
                 // pack data
@@ -310,10 +316,10 @@ impl IpiisServer {
                     .deserialize(&mut SharedDeserializeMap::default())?;
 
                 // verify data
-                let () = req.verify(Some(client.account_me.account_ref()))?;
+                let () = req.verify(Some(account_ref))?;
 
                 // handle data
-                let res = handler(req).await?;
+                let res = handler(client.clone(), req).await?;
 
                 // sign data
                 let res = {
@@ -323,7 +329,7 @@ impl IpiisServer {
                         builder = builder.expiration_date(expiration_date);
                     }
 
-                    builder.build(&client.account_me, guarantee, res)?
+                    builder.build(account_me, guarantee, res)?
                 };
 
                 // pack data
