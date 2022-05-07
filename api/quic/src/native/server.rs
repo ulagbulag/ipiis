@@ -133,7 +133,7 @@ impl IpiisServer {
                     ..
                 }) => {
                     let addr = conn.remote_address();
-                    info!("incoming connection: addr={}", addr);
+                    info!("incoming connection: addr={addr}");
 
                     {
                         // Each stream initiated by the client constitutes a new request.
@@ -145,7 +145,7 @@ impl IpiisServer {
                     }
                 }
                 Err(e) => {
-                    warn!("incoming connection error: {}", e);
+                    warn!("incoming connection error: {e}");
                 }
             }
         }
@@ -172,7 +172,7 @@ impl IpiisServer {
     {
         match Self::try_handle_connection(client, addr, bi_streams, handler).await {
             Ok(_) => (),
-            Err(e) => warn!("handling error: addr={}, {}", addr, e),
+            Err(e) => warn!("handling error: addr={addr}, {e}"),
         }
     }
 
@@ -199,11 +199,11 @@ impl IpiisServer {
         while let Some(stream) = bi_streams.next().await {
             match stream {
                 Err(quinn::ConnectionError::ApplicationClosed { .. }) => {
-                    info!("connection closed: addr={}", addr);
+                    info!("connection closed: addr={addr}");
                     break;
                 }
                 Err(e) => {
-                    bail!("connection error: {}", e);
+                    bail!("connection error: {e}");
                 }
                 Ok(stream) => {
                     let client = client.clone();
@@ -238,7 +238,7 @@ impl IpiisServer {
     {
         match Self::try_handle(client, stream, handler).await {
             Ok(_) => (),
-            Err(e) => error!("error handling: addr={}, {}", addr, e),
+            Err(e) => error!("error handling: addr={addr}, {e}"),
         }
     }
 
@@ -326,7 +326,7 @@ impl IpiisServer {
             }
             //
             _ => {
-                bail!("unknown opcode: {:x}", opcode);
+                bail!("unknown opcode: {opcode:x}");
             }
         };
 

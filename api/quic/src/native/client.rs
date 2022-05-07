@@ -121,7 +121,7 @@ impl Ipiis for IpiisClient {
         let (mut send, recv) = conn
             .open_bi()
             .await
-            .map_err(|e| anyhow!("failed to open stream: {}", e))?;
+            .map_err(|e| anyhow!("failed to open stream: {e}"))?;
 
         // send opcode
         send.write_u8(opcode.bits()).await?;
@@ -129,12 +129,12 @@ impl Ipiis for IpiisClient {
         // send data
         ipis::tokio::io::copy(msg, &mut send)
             .await
-            .map_err(|e| anyhow!("failed to send request: {}", e))?;
+            .map_err(|e| anyhow!("failed to send request: {e}"))?;
 
         // finish sending
         send.finish()
             .await
-            .map_err(|e| anyhow!("failed to shutdown stream: {}", e))?;
+            .map_err(|e| anyhow!("failed to shutdown stream: {e}"))?;
 
         // be ready for receiving
         Ok(Box::pin(recv))
@@ -161,7 +161,10 @@ impl IpiisClient {
                     )
                     .await
                     .map(|res: GuaranteeSigned<ArpResponse>| res.addr),
-                Err(e) => bail!("{}: failed to get address: {}", e, target.to_string()),
+                Err(e) => {
+                    let addr = target.to_string();
+                    bail!("{e}: failed to get address: {addr}")
+                }
             },
         }
     }
@@ -174,7 +177,7 @@ impl IpiisClient {
             .endpoint
             .connect(addr, &server_name)?
             .await
-            .map_err(|e| anyhow!("failed to connect: {}", e))?;
+            .map_err(|e| anyhow!("failed to connect: {e}"))?;
 
         let quinn::NewConnection {
             connection: conn, ..
