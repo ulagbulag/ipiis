@@ -36,21 +36,15 @@ impl<'a> Infer<'a> for IpiisClient {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_client_account_primary").ok();
 
-        let client = Self::new(account_me, account_primary)?;
-
-        // try to add the primary account's address
-        if let Some(account_primary) = account_primary {
-            if let Ok(address) = infer("ipiis_client_account_primary_address") {
-                client.add_address(account_primary, address)?;
-            }
-        }
-
-        Ok(client)
+        Self::new(account_me, account_primary)
     }
 
     fn genesis(
         account_primary: <Self as Infer>::GenesisArgs,
     ) -> Result<<Self as Infer<'a>>::GenesisResult> {
+        let account_primary =
+            account_primary.or_else(|| infer("ipiis_client_account_primary").ok());
+
         // generate an account
         let account = Account::generate();
 
@@ -93,13 +87,22 @@ impl IpiisClient {
     where
         P: AsRef<::std::path::Path>,
     {
-        Ok(Self {
+        let client = Self {
             account_me,
             account_primary,
             // TODO: allow to store in specific directory
             address_db: sled::open(tempfile::tempdir()?.path().join(path))?,
             endpoint,
-        })
+        };
+
+        // try to add the primary account's address
+        if let Some(account_primary) = account_primary {
+            if let Ok(address) = infer("ipiis_client_account_primary_address") {
+                client.add_address(account_primary, address)?;
+            }
+        }
+
+        Ok(client)
     }
 }
 
