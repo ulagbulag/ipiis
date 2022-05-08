@@ -36,7 +36,16 @@ impl<'a> Infer<'a> for IpiisClient {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_client_account_primary").ok();
 
-        Self::new(account_me, account_primary)
+        let client = Self::new(account_me, account_primary)?;
+
+        // try to add the primary account's address
+        if let Some(account_primary) = account_primary {
+            if let Ok(address) = infer("ipiis_client_account_primary_address") {
+                client.add_address(account_primary, address)?;
+            }
+        }
+
+        Ok(client)
     }
 
     fn genesis(
