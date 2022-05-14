@@ -4,7 +4,7 @@ use ipis::{
     async_trait::async_trait,
     bytecheck::CheckBytes,
     core::{
-        account::{Account, AccountRef, GuaranteeSigned, Verifier},
+        account::{Account, AccountRef, GuaranteeSigned, GuarantorSigned, Signer, Verifier},
         anyhow::Result,
         metadata::Metadata,
         signature::SignatureSerializer,
@@ -31,6 +31,14 @@ pub trait Ipiis {
         <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
     {
         Metadata::builder().build(self.account_me(), target, msg)
+    }
+
+    fn sign_as_guarantor<T>(&self, msg: GuaranteeSigned<T>) -> Result<GuarantorSigned<T>>
+    where
+        T: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
+        <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+    {
+        Signer::sign(self.account_me(), msg)
     }
 
     async fn call<'res, Req, Res>(
