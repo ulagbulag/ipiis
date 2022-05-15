@@ -4,3 +4,9 @@ bitflags::bitflags! {
         const TEXT = 0b00000001;
     }
 }
+
+impl Default for Opcode {
+    fn default() -> Self {
+        Self::TEXT
+    }
+}
