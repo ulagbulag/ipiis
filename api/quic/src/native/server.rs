@@ -1,6 +1,5 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use futures::{Future, StreamExt};
 use ipiis_common::{Ipiis, Serializer, SERIALIZER_HEAP_SIZE};
 use ipis::{
     async_trait::async_trait,
@@ -13,6 +12,7 @@ use ipis::{
         value::chrono::DateTime,
     },
     env::{infer, Infer},
+    futures::{Future, StreamExt},
     log::{error, info, warn},
     pin::{Pinned, PinnedInner},
     rkyv,

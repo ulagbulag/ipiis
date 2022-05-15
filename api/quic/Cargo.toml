@@ -22,7 +22,6 @@ bytecheck = "0.6"
 rkyv = { version = "0.7", features = ["archive_be"] }
 
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
-futures = "0.3"
 quinn = "0.8"
 rcgen = "0.9"
 rustls = { version = "0.20", features = ["dangerous_configuration"] }
