@@ -31,8 +31,16 @@ use crate::common::{
 };
 
 pub struct IpiisServer {
-    pub(crate) client: crate::client::IpiisClient,
+    client: crate::client::IpiisClient,
     incoming: Mutex<Incoming>,
+}
+
+impl ::core::ops::Deref for IpiisServer {
+    type Target = crate::client::IpiisClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.client
+    }
 }
 
 #[async_trait]
