@@ -92,6 +92,29 @@ impl Ipiis for crate::server::IpiisServer {
         self.client.call(opcode, target, msg).await
     }
 
+    async fn call_unchecked<'res, Req, Res>(
+        &self,
+        opcode: <Self as Ipiis>::Opcode,
+        target: &AccountRef,
+        msg: GuaranteeSigned<Req>,
+    ) -> Result<Pinned<GuaranteeSigned<Res>>>
+    where
+        Req: Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq
+            + Send
+            + Sync,
+        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
+        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+            + Deserialize<Res, SharedDeserializeMap>
+            + ::core::fmt::Debug
+            + PartialEq,
+    {
+        self.client.call_unchecked(opcode, target, msg).await
+    }
+
     async fn call_permanent<'res, Req, Res>(
         &self,
         opcode: <Self as Ipiis>::Opcode,
@@ -113,6 +136,31 @@ impl Ipiis for crate::server::IpiisServer {
             + PartialEq,
     {
         self.client.call_permanent(opcode, target, msg).await
+    }
+
+    async fn call_permanent_unchecked<'res, Req, Res>(
+        &self,
+        opcode: <Self as Ipiis>::Opcode,
+        target: &AccountRef,
+        msg: Req,
+    ) -> Result<Pinned<GuaranteeSigned<Res>>>
+    where
+        Req: Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq
+            + Send
+            + Sync,
+        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
+        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+            + Deserialize<Res, SharedDeserializeMap>
+            + ::core::fmt::Debug
+            + PartialEq,
+    {
+        self.client
+            .call_permanent_unchecked(opcode, target, msg)
+            .await
     }
 
     async fn call_deserialized<Req, Res>(
@@ -141,6 +189,34 @@ impl Ipiis for crate::server::IpiisServer {
         self.client.call_deserialized(opcode, target, msg).await
     }
 
+    async fn call_deserialized_unchecked<Req, Res>(
+        &self,
+        opcode: <Self as Ipiis>::Opcode,
+        target: &AccountRef,
+        msg: GuaranteeSigned<Req>,
+    ) -> Result<GuaranteeSigned<Res>>
+    where
+        Req: Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq
+            + Send
+            + Sync,
+        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
+        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+            + Deserialize<Res, SharedDeserializeMap>
+            + ::core::fmt::Debug
+            + PartialEq,
+        GuaranteeSigned<Res>: Archive,
+        <GuaranteeSigned<Res> as Archive>::Archived:
+            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
+    {
+        self.client
+            .call_deserialized_unchecked(opcode, target, msg)
+            .await
+    }
+
     async fn call_permanent_deserialized<Req, Res>(
         &self,
         opcode: <Self as Ipiis>::Opcode,
@@ -163,6 +239,31 @@ impl Ipiis for crate::server::IpiisServer {
     {
         self.client
             .call_permanent_deserialized(opcode, target, msg)
+            .await
+    }
+
+    async fn call_permanent_deserialized_unchecked<Req, Res>(
+        &self,
+        opcode: <Self as Ipiis>::Opcode,
+        target: &AccountRef,
+        msg: Req,
+    ) -> Result<GuaranteeSigned<Res>>
+    where
+        Req: Serialize<SignatureSerializer>
+            + Serialize<Serializer>
+            + ::core::fmt::Debug
+            + PartialEq
+            + Send
+            + Sync,
+        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
+        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
+            + Deserialize<Res, SharedDeserializeMap>
+            + ::core::fmt::Debug
+            + PartialEq,
+    {
+        self.client
+            .call_permanent_deserialized_unchecked(opcode, target, msg)
             .await
     }
 
