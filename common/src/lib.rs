@@ -216,27 +216,21 @@ pub const SERIALIZER_HEAP_SIZE: usize = 4096;
 #[macro_export]
 macro_rules! external_call {
     (
-        account: $account:expr,
         call: $call:expr,
         response: $ty:ty => $kind:ident,
     ) => {
         external_call!(
-            account: $account,
             call: $call,
             response: $ty => $kind,
             items: {},
         )
     };
     (
-        account: $account:expr,
         call: $call:expr,
         response: $ty:ty => $kind:ident,
         items: { $( $items:ident ),* },
     ) => {{
         let __res: ::ipis::core::account::GuaranteeSigned<$ty> = $call;
-
-        // verify response
-        let () = ::ipis::core::account::Verifier::verify(&__res, Some($account))?;
 
         // unpack response
         match __res.data.data {
