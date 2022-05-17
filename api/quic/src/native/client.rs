@@ -32,14 +32,14 @@ impl<'a> Infer<'a> for IpiisClient {
     type GenesisArgs = Option<AccountRef>;
     type GenesisResult = Self;
 
-    fn try_infer() -> Result<Self> {
+    async fn try_infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_client_account_primary").ok();
 
         Self::new(account_me, account_primary)
     }
 
-    fn genesis(
+    async fn genesis(
         account_primary: <Self as Infer>::GenesisArgs,
     ) -> Result<<Self as Infer<'a>>::GenesisResult> {
         let account_primary =

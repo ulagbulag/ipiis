@@ -48,7 +48,7 @@ impl<'a> Infer<'a> for IpiisServer {
     type GenesisArgs = u16;
     type GenesisResult = Self;
 
-    fn try_infer() -> Result<Self> {
+    async fn try_infer() -> Result<Self> {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_server_account_primary").ok();
         let account_port = infer("ipiis_server_port")?;
@@ -56,7 +56,7 @@ impl<'a> Infer<'a> for IpiisServer {
         Self::new(account_me, account_primary, account_port)
     }
 
-    fn genesis(
+    async fn genesis(
         port: <Self as Infer<'a>>::GenesisArgs,
     ) -> Result<<Self as Infer<'a>>::GenesisResult> {
         // generate an account
