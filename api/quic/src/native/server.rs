@@ -61,9 +61,10 @@ impl<'a> Infer<'a> for IpiisServer {
     ) -> Result<<Self as Infer<'a>>::GenesisResult> {
         // generate an account
         let account = Account::generate();
+        let account_primary = infer("ipiis_client_account_primary").ok();
 
         // init a server
-        let server = Self::new(account, None, port)?;
+        let server = Self::new(account, account_primary, port)?;
 
         Ok(server)
     }
