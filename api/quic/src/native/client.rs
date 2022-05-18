@@ -146,7 +146,27 @@ impl Ipiis for IpiisClient {
     }
 
     async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()> {
-        self.book.set_primary(kind, account)
+        self.book.set_primary(kind, account)?;
+
+        // update server-side if you are a root
+        if let Some(primary) = self.book.get_primary(None)? {
+            if self.account_me().account_ref() == primary {
+                // pack request
+                let req = RequestType::<<Self as Ipiis>::Address>::SetAccountPrimary {
+                    kind: kind.copied(),
+                    account: *account,
+                };
+
+                // external call
+                let () = external_call!(
+                    call: self
+                        .call_permanent_deserialized(&primary, req)
+                        .await?,
+                    response: Response<<Self as Ipiis>::Address> => SetAccountPrimary,
+                );
+            }
+        }
+        Ok(())
     }
 
     async fn get_address(&self, target: &AccountRef) -> Result<<Self as Ipiis>::Address> {
@@ -186,7 +206,27 @@ impl Ipiis for IpiisClient {
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()> {
-        self.book.set(target, address)
+        self.book.set(target, address)?;
+
+        // update server-side if you are a root
+        if let Some(primary) = self.book.get_primary(None)? {
+            if self.account_me().account_ref() == primary {
+                // pack request
+                let req = RequestType::<<Self as Ipiis>::Address>::SetAddress {
+                    account: *target,
+                    address: *address,
+                };
+
+                // external call
+                let () = external_call!(
+                    call: self
+                        .call_permanent_deserialized(&primary, req)
+                        .await?,
+                    response: Response<<Self as Ipiis>::Address> => SetAddress,
+                );
+            }
+        }
+        Ok(())
     }
 
     async fn call_raw<Req>(
