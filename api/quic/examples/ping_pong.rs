@@ -1,11 +1,7 @@
 use std::sync::Arc;
 
 use bytecheck::CheckBytes;
-use ipiis_api_quic::{
-    client::IpiisClient,
-    common::{opcode::Opcode, Ipiis},
-    server::IpiisServer,
-};
+use ipiis_api_quic::{client::IpiisClient, common::Ipiis, server::IpiisServer};
 use ipis::{
     class::Class,
     core::{
@@ -33,7 +29,7 @@ async fn main() -> Result<()> {
     for _ in 0..5 {
         // recv data
         let res: GuaranteeSigned<String> = client
-            .call_permanent_deserialized(Opcode::TEXT, &server, req.clone())
+            .call_permanent_deserialized(&server, req.clone())
             .await?;
 
         // verify data
@@ -48,7 +44,9 @@ async fn main() -> Result<()> {
 async fn run_client(server: AccountRef, port: u16) -> Result<IpiisClient> {
     // init a client
     let client = IpiisClient::genesis(None).await?;
-    client.add_address(server, format!("127.0.0.1:{}", port).parse()?)?;
+    client
+        .set_address(&server, &format!("127.0.0.1:{}", port).parse()?)
+        .await?;
     Ok(client)
 }
 

@@ -6,7 +6,8 @@ use ipis::core::{
 use rustls::{Certificate, PrivateKey};
 
 pub fn get_name(account: &AccountRef) -> String {
-    format!("{}.ipiis", account.to_string())
+    let account = account.to_string();
+    format!("{account}.ipiis")
 }
 
 pub(crate) fn generate(account: &Account) -> Result<(PrivateKey, Vec<Certificate>)> {

@@ -1,24 +1,18 @@
 [package]
-name = "ipiis-api"
+name = "ipiis-runtime"
 version = "0.1.0"
 edition = "2021"
 
 authors = ["Ho Kim <ho.kim@ulagbulag.io>"]
 description = "InterPlanetary Interface Interconnection Service"
 documentation = "https://docs.rs/ipiis"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 readme = "../README.md"
 homepage = "https://ulagbulag.io/"
 repository = "https://github.com/ulagbulag-village/ipiis"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = ["quic"]
-quic = ["ipiis-api-quic"]
-
 [dependencies]
-ipiis-api-quic = { path = "./quic", optional = true }
-
-[dev-dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
+ipiis-api = { path = "../api" }

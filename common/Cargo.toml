@@ -17,3 +17,6 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 ipis = { git = "https://github.com/ulagbulag-village/ipis", features = [
     "derive",
 ] }
+
+bytecheck = "0.6"
+rkyv = { version = "0.7", features = ["archive_be"] }

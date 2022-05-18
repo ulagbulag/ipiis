@@ -1,29 +1,40 @@
 use core::pin::Pin;
 
+use bytecheck::CheckBytes;
 use ipis::{
     async_trait::async_trait,
-    bytecheck::CheckBytes,
     core::{
         account::{Account, AccountRef, GuaranteeSigned, GuarantorSigned, Signer, Verifier},
         anyhow::Result,
         metadata::Metadata,
         signature::SignatureSerializer,
+        value::hash::Hash,
     },
     pin::{Pinned, PinnedInner},
-    rkyv::{
-        de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
-        Deserialize, Serialize,
-    },
     tokio::io::{AsyncRead, AsyncReadExt},
+};
+use rkyv::{
+    de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
+    Deserialize, Serialize,
 };
 
 #[async_trait]
 pub trait Ipiis {
-    type Opcode: Send + Sync;
+    type Address: Send + Sync;
 
     fn account_me(&self) -> &Account;
 
-    fn account_primary(&self) -> Result<AccountRef>;
+    async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef>;
+
+    async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()>;
+
+    async fn get_address(&self, target: &AccountRef) -> Result<<Self as Ipiis>::Address>;
+
+    async fn set_address(
+        &self,
+        target: &AccountRef,
+        address: &<Self as Ipiis>::Address,
+    ) -> Result<()>;
 
     fn sign<T>(&self, target: AccountRef, msg: T) -> Result<GuaranteeSigned<T>>
     where
@@ -43,7 +54,6 @@ pub trait Ipiis {
 
     async fn call<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -65,7 +75,7 @@ pub trait Ipiis {
         let () = msg.verify(Some(*target))?;
 
         // recv data
-        let res = self.call_unchecked(opcode, target, msg).await?;
+        let res = self.call_unchecked(target, msg).await?;
 
         // verify data
         let () = res.verify(Some(self.account_me().account_ref()))?;
@@ -75,7 +85,6 @@ pub trait Ipiis {
 
     async fn call_unchecked<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -95,12 +104,9 @@ pub trait Ipiis {
     {
         // send data
         let msg = ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&msg)?;
-        let hint = Some(::core::mem::size_of::<Res>());
 
         // recv data
-        let bytes = self
-            .call_raw_to_end(opcode, target, &mut msg.as_ref(), hint)
-            .await?;
+        let bytes = self.call_raw_to_end(target, &mut msg.as_ref()).await?;
 
         // unpack data
         let res = PinnedInner::<GuaranteeSigned<Res>>::new(bytes)?;
@@ -110,7 +116,6 @@ pub trait Ipiis {
 
     async fn call_permanent<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -132,7 +137,7 @@ pub trait Ipiis {
         let msg = self.sign(*target, msg)?;
 
         // recv data
-        let res = self.call_unchecked(opcode, target, msg).await?;
+        let res = self.call_unchecked(target, msg).await?;
 
         // verify data
         let () = res.verify(Some(self.account_me().account_ref()))?;
@@ -142,7 +147,6 @@ pub trait Ipiis {
 
     async fn call_permanent_unchecked<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -164,12 +168,11 @@ pub trait Ipiis {
         let msg = self.sign(*target, msg)?;
 
         // recv data
-        self.call_unchecked(opcode, target, msg).await
+        self.call_unchecked(target, msg).await
     }
 
     async fn call_deserialized<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<GuaranteeSigned<Res>>
@@ -191,9 +194,7 @@ pub trait Ipiis {
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
     {
         // recv data
-        let res = self
-            .call_deserialized_unchecked(opcode, target, msg)
-            .await?;
+        let res = self.call_deserialized_unchecked(target, msg).await?;
 
         // verify data
         let () = res.verify(Some(self.account_me().account_ref()))?;
@@ -203,7 +204,6 @@ pub trait Ipiis {
 
     async fn call_deserialized_unchecked<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<GuaranteeSigned<Res>>
@@ -225,7 +225,7 @@ pub trait Ipiis {
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
     {
         // recv data
-        self.call_unchecked(opcode, target, msg)
+        self.call_unchecked(target, msg)
             .await
             // unpack data
             .and_then(|e: Pinned<GuaranteeSigned<Res>>| e.deserialize_into())
@@ -233,7 +233,6 @@ pub trait Ipiis {
 
     async fn call_permanent_deserialized<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<GuaranteeSigned<Res>>
@@ -253,7 +252,7 @@ pub trait Ipiis {
     {
         // recv data
         let res: GuaranteeSigned<Res> = self
-            .call_permanent_deserialized_unchecked(opcode, target, msg)
+            .call_permanent_deserialized_unchecked(target, msg)
             .await?;
 
         // verify data
@@ -264,7 +263,6 @@ pub trait Ipiis {
 
     async fn call_permanent_deserialized_unchecked<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<GuaranteeSigned<Res>>
@@ -286,13 +284,12 @@ pub trait Ipiis {
         let msg = self.sign(*target, msg)?;
 
         // recv data
-        self.call_deserialized_unchecked::<Req, Res>(opcode, target, msg)
+        self.call_deserialized_unchecked::<Req, Res>(target, msg)
             .await
     }
 
     async fn call_raw<Req>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: &mut Req,
     ) -> Result<Pin<Box<dyn AsyncRead + Send>>>
@@ -301,7 +298,6 @@ pub trait Ipiis {
 
     async fn call_raw_exact<Req>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: &mut Req,
         buf: &mut [u8],
@@ -309,31 +305,26 @@ pub trait Ipiis {
     where
         Req: AsyncRead + Send + Sync + Unpin,
     {
-        self.call_raw(opcode, target, msg)
+        self.call_raw(target, msg)
             .await?
             .read_exact(buf)
             .await
             .map_err(Into::into)
     }
 
-    async fn call_raw_to_end<Req>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: &mut Req,
-        hint: Option<usize>,
-    ) -> Result<Vec<u8>>
+    async fn call_raw_to_end<Req>(&self, target: &AccountRef, msg: &mut Req) -> Result<Vec<u8>>
     where
         Req: AsyncRead + Send + Sync + Unpin,
     {
-        let mut buf = match hint {
-            Some(hint) => Vec::with_capacity(hint),
-            None => Vec::default(),
+        let mut recv = self.call_raw(target, msg).await?;
+
+        // create a buffer
+        let mut buf = {
+            let len = recv.read_u64().await?;
+            vec![0; len.try_into()?]
         };
-        self.call_raw(opcode, target, msg)
-            .await?
-            .read_to_end(&mut buf)
-            .await?;
+
+        recv.read_exact(&mut buf).await?;
         Ok(buf)
     }
 }
@@ -343,16 +334,32 @@ impl<Client, IpiisClient> Ipiis for Client
 where
     Client: ::core::ops::Deref<Target = IpiisClient> + Send + Sync,
     IpiisClient: Ipiis + Send + Sync + 'static,
-    <IpiisClient as Ipiis>::Opcode: 'static,
+    <IpiisClient as Ipiis>::Address: 'static,
 {
-    type Opcode = <IpiisClient as Ipiis>::Opcode;
+    type Address = <IpiisClient as Ipiis>::Address;
 
     fn account_me(&self) -> &Account {
         (**self).account_me()
     }
 
-    fn account_primary(&self) -> Result<AccountRef> {
-        (**self).account_primary()
+    async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef> {
+        (**self).get_account_primary(kind).await
+    }
+
+    async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()> {
+        (**self).set_account_primary(kind, account).await
+    }
+
+    async fn get_address(&self, target: &AccountRef) -> Result<<Self as Ipiis>::Address> {
+        (**self).get_address(target).await
+    }
+
+    async fn set_address(
+        &self,
+        target: &AccountRef,
+        address: &<Self as Ipiis>::Address,
+    ) -> Result<()> {
+        (**self).set_address(target, address).await
     }
 
     fn sign<T>(&self, target: AccountRef, msg: T) -> Result<GuaranteeSigned<T>>
@@ -365,7 +372,6 @@ where
 
     async fn call<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -383,12 +389,11 @@ where
             + ::core::fmt::Debug
             + PartialEq,
     {
-        (**self).call(opcode, target, msg).await
+        (**self).call(target, msg).await
     }
 
     async fn call_unchecked<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -406,12 +411,11 @@ where
             + ::core::fmt::Debug
             + PartialEq,
     {
-        (**self).call_unchecked(opcode, target, msg).await
+        (**self).call_unchecked(target, msg).await
     }
 
     async fn call_permanent<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -429,12 +433,11 @@ where
             + ::core::fmt::Debug
             + PartialEq,
     {
-        (**self).call_permanent(opcode, target, msg).await
+        (**self).call_permanent(target, msg).await
     }
 
     async fn call_permanent_unchecked<'res, Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<Pinned<GuaranteeSigned<Res>>>
@@ -452,12 +455,11 @@ where
             + ::core::fmt::Debug
             + PartialEq,
     {
-        (**self).call_permanent_unchecked(opcode, target, msg).await
+        (**self).call_permanent_unchecked(target, msg).await
     }
 
     async fn call_deserialized<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<GuaranteeSigned<Res>>
@@ -478,12 +480,11 @@ where
         <GuaranteeSigned<Res> as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
     {
-        (**self).call_deserialized(opcode, target, msg).await
+        (**self).call_deserialized(target, msg).await
     }
 
     async fn call_deserialized_unchecked<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: GuaranteeSigned<Req>,
     ) -> Result<GuaranteeSigned<Res>>
@@ -504,14 +505,11 @@ where
         <GuaranteeSigned<Res> as Archive>::Archived:
             for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
     {
-        (**self)
-            .call_deserialized_unchecked(opcode, target, msg)
-            .await
+        (**self).call_deserialized_unchecked(target, msg).await
     }
 
     async fn call_permanent_deserialized<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<GuaranteeSigned<Res>>
@@ -529,14 +527,11 @@ where
             + ::core::fmt::Debug
             + PartialEq,
     {
-        (**self)
-            .call_permanent_deserialized(opcode, target, msg)
-            .await
+        (**self).call_permanent_deserialized(target, msg).await
     }
 
     async fn call_permanent_deserialized_unchecked<Req, Res>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: Req,
     ) -> Result<GuaranteeSigned<Res>>
@@ -555,25 +550,23 @@ where
             + PartialEq,
     {
         (**self)
-            .call_permanent_deserialized_unchecked(opcode, target, msg)
+            .call_permanent_deserialized_unchecked(target, msg)
             .await
     }
 
     async fn call_raw<Req>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: &mut Req,
     ) -> Result<Pin<Box<dyn AsyncRead + Send>>>
     where
         Req: AsyncRead + Send + Sync + Unpin,
     {
-        (**self).call_raw(opcode, target, msg).await
+        (**self).call_raw(target, msg).await
     }
 
     async fn call_raw_exact<Req>(
         &self,
-        opcode: <Self as Ipiis>::Opcode,
         target: &AccountRef,
         msg: &mut Req,
         buf: &mut [u8],
@@ -581,21 +574,57 @@ where
     where
         Req: AsyncRead + Send + Sync + Unpin,
     {
-        (**self).call_raw_exact(opcode, target, msg, buf).await
+        (**self).call_raw_exact(target, msg, buf).await
     }
 
-    async fn call_raw_to_end<Req>(
-        &self,
-        opcode: <Self as Ipiis>::Opcode,
-        target: &AccountRef,
-        msg: &mut Req,
-        hint: Option<usize>,
-    ) -> Result<Vec<u8>>
+    async fn call_raw_to_end<Req>(&self, target: &AccountRef, msg: &mut Req) -> Result<Vec<u8>>
     where
         Req: AsyncRead + Send + Sync + Unpin,
     {
-        (**self).call_raw_to_end(opcode, target, msg, hint).await
+        (**self).call_raw_to_end(target, msg).await
     }
+}
+
+pub type Request<Address> = GuaranteeSigned<RequestType<Address>>;
+
+#[derive(Clone, Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[archive(bound(archive = "
+    <Address as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+",))]
+#[archive_attr(derive(CheckBytes, Debug, PartialEq))]
+pub enum RequestType<Address> {
+    GetAccountPrimary {
+        kind: Option<Hash>,
+    },
+    SetAccountPrimary {
+        kind: Option<Hash>,
+        account: AccountRef,
+    },
+    GetAddress {
+        account: AccountRef,
+    },
+    SetAddress {
+        account: AccountRef,
+        address: Address,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Archive, Serialize, Deserialize)]
+#[archive(bound(archive = "
+    <Address as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+    <Option<Address> as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+",))]
+#[archive_attr(derive(CheckBytes, Debug, PartialEq))]
+pub enum Response<Address> {
+    GetAccountPrimary {
+        account: AccountRef,
+        address: Option<Address>,
+    },
+    SetAccountPrimary,
+    GetAddress {
+        address: Address,
+    },
+    SetAddress,
 }
 
 pub type Serializer = ::ipis::rkyv::ser::serializers::AllocSerializer<SERIALIZER_HEAP_SIZE>;
