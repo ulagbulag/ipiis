@@ -41,7 +41,6 @@ async fn main() -> Result<()> {
 
     // deploy a end
     let end_1 = deploy(5003, Some((edge_1_account, 5002))).await?;
-    let end_1_account = end_1.account_me().account_ref();
 
     // get the center's account from `end_1`
     // route: `end_1` --> `edge_1` --> `center_1`
