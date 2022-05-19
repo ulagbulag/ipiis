@@ -893,9 +893,8 @@ macro_rules! handle_external_call {
     (
         server: $server:ty => $client:ty,
         name: $name:ident,
-        request: $io:path => {
-            $( $opcode:ident => $handler:ident ,)*
-        },
+        request: $io:path => { $( $opcode:ident => $handler:ident ,)* },
+        $( request_raw: $io_raw:path => { $( $opcode_raw:ident => $handler_raw:ident ,)* },)?
     ) => {
         impl $server {
             pub async fn $name(self: &Arc<Self>) {
@@ -908,16 +907,14 @@ macro_rules! handle_external_call {
 
         handle_external_call!(
             server: $server => $client,
-            request: $io => {
-                $( $opcode => $handler ,)*
-            },
+            request: $io => { $( $opcode => $handler ,)* },
+            $( request_raw: $io_raw => { $( $opcode_raw => $handler_raw ,)* },)?
         );
     };
     (
         server: $server:ty => $client:ty,
-        request: $io:path => {
-            $( $opcode:ident => $handler:ident ,)*
-        },
+        request: $io:path => { $( $opcode:ident => $handler:ident ,)* },
+        $( request_raw: $io_raw:path => { $( $opcode_raw:ident => $handler_raw:ident ,)* },)?
     ) => {
         impl $server {
             async fn __handle<__IpiisClient>(
@@ -988,6 +985,15 @@ macro_rules! handle_external_call {
                             res.send(client.as_ref(), &guarantee, &mut *send).await
                         }
                     )*
+                    $($(
+                        OpCode::$opcode_raw => {
+                            // handle raw request
+                            let (mut res, guarantee) = Self::$handler_raw(client, &mut *recv).await?;
+
+                            // send response
+                            res.send(client.as_ref(), &guarantee, &mut *send).await
+                        },
+                    )*)?
                 }
             }
         }

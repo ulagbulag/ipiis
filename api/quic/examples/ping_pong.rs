@@ -9,7 +9,7 @@ use ipis::{
         anyhow::{bail, Result},
     },
     env::Infer,
-    tokio,
+    tokio::{self, io::AsyncRead},
 };
 
 #[tokio::main]
@@ -69,6 +69,25 @@ async fn main() -> Result<()> {
                 msg.to_string(),
                 format!("hello, {} years old {}!", &name, age),
             );
+        }
+
+        // handle Raw
+        {
+            // external call
+            let (msg,) = external_call!(
+                client: &client,
+                target: None => &server,
+                request: crate::io => Raw,
+                sign: client.sign(server, ())?,
+                inputs: {
+                    name: "Alice".to_string(),
+                    age: 42,
+                },
+                outputs: { msg, },
+            );
+
+            // verify data
+            assert_eq!(msg, format!("hello, {} years old {}!", &name, age));
         }
     }
     Ok(())
@@ -132,6 +151,9 @@ handle_external_call!(
         Ok => handle_ok,
         Err => handle_err,
     },
+    request_raw: crate::io => {
+        Raw => handle_raw,
+    },
 );
 
 impl PingPongServer {
@@ -174,6 +196,38 @@ impl PingPongServer {
         // raise an error
         bail!(msg)
     }
+
+    async fn handle_raw(
+        client: &IpiisServer,
+        mut recv: impl AsyncRead + Unpin,
+    ) -> Result<(crate::io::response::Raw<'static>, AccountRef)> {
+        // recv request
+        let mut req = crate::io::request::Raw::recv(client, &mut recv).await?;
+
+        // unpack sign
+        let sign_as_guarantee = req.__sign.as_ref().await?;
+
+        // find the guarantee
+        let guarantee = sign_as_guarantee.guarantee.account;
+
+        // unpack data
+        let name = req.name.as_ref().await?;
+        let age = req.age.as_ref().await?;
+
+        // handle data
+        let msg = format!("hello, {} years old {}!", &name, age);
+
+        // sign data
+        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+
+        // pack data
+        let res = crate::io::response::Raw {
+            __lifetime: Default::default(),
+            __sign: ::ipis::stream::DynStream::Owned(sign),
+            msg: ::ipis::stream::DynStream::Owned(msg),
+        };
+        Ok((res, guarantee))
+    }
 }
 
 define_io! {
@@ -190,6 +244,18 @@ define_io! {
         generics: { },
     },
     Err {
+        inputs: {
+            name: String,
+            age: u32,
+        },
+        input_sign: GuaranteeSigned<()>,
+        outputs: {
+            msg: String,
+        },
+        output_sign: GuaranteeSigned<()>,
+        generics: { },
+    },
+    Raw {
         inputs: {
             name: String,
             age: u32,
