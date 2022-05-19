@@ -293,35 +293,11 @@ macro_rules! define_io {
                                     + PartialEq,
                             )*
                         {
-                            use ipis::tokio::io::AsyncReadExt;
-
                             // send data
-                            let mut recv = self.send(client, kind, target).await?;
+                            let recv = self.send(client, kind, target).await?;
 
-                            // recv flag
-                            match super::super::ServerResult::from_bits(recv.read_u8().await?) {
-                                // parse the data
-                                Some(super::super::ServerResult::ACK_OK) => {
-                                    super::response::$case::recv(client, recv).await
-                                }
-                                // parse the error
-                                Some(super::super::ServerResult::ACK_ERR) => {
-                                    // recv data
-                                    let res: String = ::ipis::stream::DynStream::recv(&mut recv)
-                                        .await?
-                                        .to_owned().await?;
-
-                                    // TODO: verify data
-
-                                    ::ipis::core::anyhow::bail!(res)
-                                }
-                                Some(flag) if flag.contains(super::super::ServerResult::ACK) => {
-                                    ::ipis::core::anyhow::bail!("unknown ACK flag: {flag:?}")
-                                }
-                                Some(_) | None => {
-                                    ::ipis::core::anyhow::bail!("cannot parse the result of response")
-                                }
-                            }
+                            // recv data
+                            super::response::$case::recv(client, recv).await
                         }
 
                         pub async fn send<__IpiisClient>(
@@ -373,7 +349,10 @@ macro_rules! define_io {
                                     + PartialEq,
                             )*
                         {
-                            use ipis::core::signed::IsSigned;
+                            use ipis::{
+                                core::signed::IsSigned,
+                                tokio::io::AsyncReadExt,
+                            };
 
                             // make a opcode
                             let mut opcode = ::ipis::stream::DynStream::Owned(super::OpCode::$case);
@@ -400,7 +379,7 @@ macro_rules! define_io {
                             )*
 
                             // make a connection
-                            let (mut send, recv) = client.call_raw(kind, target).await?;
+                            let (mut send, mut recv) = client.call_raw(kind, target).await?;
 
                             // send opcode
                             opcode.copy_to(&mut send).await?;
@@ -414,7 +393,29 @@ macro_rules! define_io {
                                     self.$input_field.copy_to(&mut send).await?;
                                 }
                             )*
-                            Ok(recv)
+
+                            // recv flag
+                            match super::super::ServerResult::from_bits(recv.read_u8().await?) {
+                                // parse the data
+                                Some(super::super::ServerResult::ACK_OK) => Ok(recv),
+                                // parse the error
+                                Some(super::super::ServerResult::ACK_ERR) => {
+                                    // recv data
+                                    let res: String = ::ipis::stream::DynStream::recv(&mut recv)
+                                        .await?
+                                        .to_owned().await?;
+
+                                    // TODO: verify data
+
+                                    ::ipis::core::anyhow::bail!(res)
+                                }
+                                Some(flag) if flag.contains(super::super::ServerResult::ACK) => {
+                                    ::ipis::core::anyhow::bail!("unknown ACK flag: {flag:?}")
+                                }
+                                Some(_) | None => {
+                                    ::ipis::core::anyhow::bail!("cannot parse the result of response")
+                                }
+                            }
                         }
                     }
 
@@ -730,6 +731,81 @@ macro_rules! external_call {
     ) => {{
         use ipis::core::signed::IsSigned;
 
+        // external call
+        #[allow(clippy::redundant_field_names)]
+        let mut res = external_call!(
+            client: $client,
+            target: $kind => $target,
+            request: $io => $req,
+            sign: $input_sign,
+            inputs: { $( $input_field : $input_value ,)* },
+            outputs: { $( $output ,)* },
+            only_call,
+        );
+
+        // unpack response
+        #[allow(clippy::unused_unit)]
+        {( $( res.$output.to_owned().await?, )* )}
+    }};
+    (
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        outputs: { $( $output:ident ,)* },
+        only_call,
+    ) => {{
+        // pack request
+        #[allow(clippy::redundant_field_names)]
+        let mut req = external_call!(
+            client: $client,
+            target: $kind => $target,
+            request: $io => $req,
+            sign: $input_sign,
+            inputs: { $( $input_field : $input_value ,)* },
+            outputs: { $( $output ,)* },
+            no_run,
+        );
+
+        // recv response
+        req.call($client, $kind, $target).await?
+    }};
+    (
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        outputs: { $( $output:ident ,)* },
+        only_send,
+    ) => {{
+        // pack request
+        #[allow(clippy::redundant_field_names)]
+        let mut req = external_call!(
+            client: $client,
+            target: $kind => $target,
+            request: $io => $req,
+            sign: $input_sign,
+            inputs: { $( $input_field : $input_value ,)* },
+            outputs: { $( $output ,)* },
+            no_run,
+        );
+
+        // recv response
+        req.send($client, $kind, $target).await?
+    }};
+    (
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        outputs: { $( $output:ident ,)* },
+        no_run,
+    ) => {{
+        use ipis::core::signed::IsSigned;
+
         use $io::{request::$req};
 
         // sign data
@@ -747,18 +823,11 @@ macro_rules! external_call {
 
         // pack request
         #[allow(clippy::redundant_field_names)]
-        let mut req = $req {
+        $req {
             __lifetime: Default::default(),
             __sign: sign,
             $( $input_field: ::ipis::stream::DynStream::Owned($input_value) ,)*
-        };
-
-        // recv response
-        let mut res = req.call($client, $kind, $target).await?;
-
-        // unpack response
-        #[allow(clippy::unused_unit)]
-        {( $( res.$output.to_owned().await?, )* )}
+        }
     }};
 }
 
