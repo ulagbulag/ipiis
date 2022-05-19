@@ -693,6 +693,7 @@ macro_rules! define_io {
 ///     client: self,
 ///     target: None => &primary,
 ///     request: ::ipiis_common::io => GetAccountPrimary,
+///     sign: self.sign(primary, Some(*kind))?,
 ///     inputs: {
 ///         sign: self.sign(primary, Some(*kind))?,
 ///         kind: Some(*kind),
