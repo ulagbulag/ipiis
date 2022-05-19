@@ -67,7 +67,7 @@ impl IpiisServer {
         let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // unpack data
-        let kind = req.kind.into_owned().await?;
+        let kind = sign_as_guarantee.data.data;
 
         // handle data
         let account = client.get_account_primary(kind.as_ref()).await?;
@@ -96,8 +96,8 @@ impl IpiisServer {
         sign_as_guarantee.ensure_self_signed()?;
 
         // unpack data
-        let kind = req.kind.into_owned().await?;
-        let account = req.account.into_owned().await?;
+        let kind = sign_as_guarantee.data.data.0;
+        let account = sign_as_guarantee.data.data.1;
 
         // handle data
         client.set_account_primary(kind.as_ref(), &account).await?;
@@ -121,8 +121,8 @@ impl IpiisServer {
         let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // unpack data
-        let kind = req.kind.into_owned().await?;
-        let account = req.account.into_owned().await?;
+        let kind = sign_as_guarantee.data.data.0;
+        let account = sign_as_guarantee.data.data.1;
 
         // handle data
         let address = client.get_address(kind.as_ref(), &account).await?;
@@ -150,9 +150,9 @@ impl IpiisServer {
         sign_as_guarantee.ensure_self_signed()?;
 
         // unpack data
-        let kind = req.kind.into_owned().await?;
-        let account = req.account.into_owned().await?;
-        let address = req.address.into_owned().await?;
+        let kind = sign_as_guarantee.data.data.0;
+        let account = sign_as_guarantee.data.data.1;
+        let address = sign_as_guarantee.data.data.2;
 
         // handle data
         client

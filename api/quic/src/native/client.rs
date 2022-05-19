@@ -122,9 +122,7 @@ impl Ipiis for IpiisClient {
                         target: None => &primary,
                         request: ::ipiis_common::io => GetAccountPrimary,
                         sign: self.sign(primary, Some(*kind))?,
-                        inputs: {
-                            kind: Some(*kind),
-                        },
+                        inputs: { },
                         outputs: { account, address, },
                     );
 
@@ -154,10 +152,7 @@ impl Ipiis for IpiisClient {
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAccountPrimary,
                     sign: self.sign(primary, (kind.copied(), *account))?,
-                    inputs: {
-                        kind: kind.copied(),
-                        account: *account,
-                    },
+                    inputs: { },
                 );
             }
         }
@@ -179,10 +174,7 @@ impl Ipiis for IpiisClient {
                         target: None => &primary,
                         request: ::ipiis_common::io => GetAddress,
                         sign: self.sign(primary, (kind.copied(), *target))?,
-                        inputs: {
-                            kind: kind.copied(),
-                            account: *target,
-                        },
+                        inputs: { },
                         outputs: { address, },
                     );
 
@@ -217,11 +209,7 @@ impl Ipiis for IpiisClient {
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAddress,
                     sign: self.sign(primary, (kind.copied(), *target, *address))?,
-                    inputs: {
-                        kind: kind.copied(),
-                        account: *target,
-                        address: *address,
-                    },
+                    inputs: { },
                 );
             }
         }

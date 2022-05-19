@@ -129,9 +129,7 @@ where
 
 define_io! {
     GetAccountPrimary {
-        inputs: {
-            kind: Option<Hash>,
-        },
+        inputs: { },
         input_sign: GuaranteeSigned<Option<Hash>>,
         outputs: {
             account: AccountRef,
@@ -141,20 +139,14 @@ define_io! {
         generics: { Address, },
     },
     SetAccountPrimary {
-        inputs: {
-            kind: Option<Hash>,
-            account: AccountRef,
-        },
+        inputs: { },
         input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
         outputs: { },
         output_sign: GuarantorSigned<(Option<Hash>, AccountRef)>,
         generics: { },
     },
     GetAddress {
-        inputs: {
-            kind: Option<Hash>,
-            account: AccountRef,
-        },
+        inputs: { },
         input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
         outputs: {
             address: Address,
@@ -163,11 +155,7 @@ define_io! {
         generics: { Address, },
     },
     SetAddress {
-        inputs: {
-            kind: Option<Hash>,
-            account: AccountRef,
-            address: Address,
-        },
+        inputs: { },
         input_sign: GuaranteeSigned<(Option<Hash>, AccountRef, Address)>,
         outputs: { },
         output_sign: GuarantorSigned<(Option<Hash>, AccountRef, Address)>,
