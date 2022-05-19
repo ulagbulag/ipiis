@@ -56,7 +56,7 @@ impl IpiisServer {
 
     async fn handle_get_account_primary(
         client: &IpiisServer,
-        mut req: ::ipiis_common::io::request::GetAccountPrimary<
+        req: ::ipiis_common::io::request::GetAccountPrimary<
             'static,
             <IpiisClient as Ipiis>::Address,
         >,
@@ -64,17 +64,17 @@ impl IpiisServer {
         ::ipiis_common::io::response::GetAccountPrimary<'static, <IpiisClient as Ipiis>::Address>,
     > {
         // unpack sign
-        let sign_as_guarantee = req.__sign.as_ref().await?;
+        let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // unpack data
-        let kind = req.kind.as_ref().await?;
+        let kind = req.kind.into_owned().await?;
 
         // handle data
         let account = client.get_account_primary(kind.as_ref()).await?;
         let address = client.book.get(kind.as_ref(), &account)?;
 
         // sign data
-        let sign = client.sign(sign_as_guarantee.guarantee.account, (account, address))?;
+        let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
         Ok(::ipiis_common::io::response::GetAccountPrimary {
@@ -87,23 +87,23 @@ impl IpiisServer {
 
     async fn handle_set_account_primary(
         client: &IpiisServer,
-        mut req: ::ipiis_common::io::request::SetAccountPrimary<'static>,
+        req: ::ipiis_common::io::request::SetAccountPrimary<'static>,
     ) -> Result<::ipiis_common::io::response::SetAccountPrimary<'static>> {
         // unpack sign
-        let sign_as_guarantee = req.__sign.as_ref().await?;
+        let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // verify as root
         sign_as_guarantee.ensure_self_signed()?;
 
         // unpack data
-        let kind = req.kind.as_ref().await?;
-        let account = req.account.as_ref().await?;
+        let kind = req.kind.into_owned().await?;
+        let account = req.account.into_owned().await?;
 
         // handle data
-        client.set_account_primary(kind.as_ref(), account).await?;
+        client.set_account_primary(kind.as_ref(), &account).await?;
 
         // sign data
-        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+        let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
         Ok(::ipiis_common::io::response::SetAccountPrimary {
@@ -114,21 +114,21 @@ impl IpiisServer {
 
     async fn handle_get_address(
         client: &IpiisServer,
-        mut req: ::ipiis_common::io::request::GetAddress<'static, <IpiisClient as Ipiis>::Address>,
+        req: ::ipiis_common::io::request::GetAddress<'static, <IpiisClient as Ipiis>::Address>,
     ) -> Result<::ipiis_common::io::response::GetAddress<'static, <IpiisClient as Ipiis>::Address>>
     {
         // unpack sign
-        let sign_as_guarantee = req.__sign.as_ref().await?;
+        let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // unpack data
-        let kind = req.kind.as_ref().await?;
-        let account = req.account.as_ref().await?;
+        let kind = req.kind.into_owned().await?;
+        let account = req.account.into_owned().await?;
 
         // handle data
-        let address = client.get_address(kind.as_ref(), account).await?;
+        let address = client.get_address(kind.as_ref(), &account).await?;
 
         // sign data
-        let sign = client.sign(sign_as_guarantee.guarantee.account, address)?;
+        let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
         Ok(::ipiis_common::io::response::GetAddress {
@@ -140,25 +140,27 @@ impl IpiisServer {
 
     async fn handle_set_address(
         client: &IpiisServer,
-        mut req: ::ipiis_common::io::request::SetAddress<'static, <IpiisClient as Ipiis>::Address>,
+        req: ::ipiis_common::io::request::SetAddress<'static, <IpiisClient as Ipiis>::Address>,
     ) -> Result<::ipiis_common::io::response::SetAddress<'static, <IpiisClient as Ipiis>::Address>>
     {
         // unpack sign
-        let sign_as_guarantee = req.__sign.as_ref().await?;
+        let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // verify as root
         sign_as_guarantee.ensure_self_signed()?;
 
         // unpack data
-        let kind = req.kind.as_ref().await?;
-        let account = req.account.as_ref().await?;
-        let address = req.address.as_ref().await?;
+        let kind = req.kind.into_owned().await?;
+        let account = req.account.into_owned().await?;
+        let address = req.address.into_owned().await?;
 
         // handle data
-        client.set_address(kind.as_ref(), account, address).await?;
+        client
+            .set_address(kind.as_ref(), &account, &address)
+            .await?;
 
         // sign data
-        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+        let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
         Ok(::ipiis_common::io::response::SetAddress {

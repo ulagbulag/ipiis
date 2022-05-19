@@ -137,7 +137,7 @@ define_io! {
             account: AccountRef,
             address: Option<Address>,
         },
-        output_sign: GuaranteeSigned<(AccountRef, Option<Address>)>,
+        output_sign: GuarantorSigned<Option<Hash>>,
         generics: { Address, },
     },
     SetAccountPrimary {
@@ -147,7 +147,7 @@ define_io! {
         },
         input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
         outputs: { },
-        output_sign: GuaranteeSigned<()>,
+        output_sign: GuarantorSigned<(Option<Hash>, AccountRef)>,
         generics: { },
     },
     GetAddress {
@@ -159,7 +159,7 @@ define_io! {
         outputs: {
             address: Address,
         },
-        output_sign: GuaranteeSigned<Address>,
+        output_sign: GuarantorSigned<(Option<Hash>, AccountRef)>,
         generics: { Address, },
     },
     SetAddress {
@@ -170,7 +170,7 @@ define_io! {
         },
         input_sign: GuaranteeSigned<(Option<Hash>, AccountRef, Address)>,
         outputs: { },
-        output_sign: GuaranteeSigned<()>,
+        output_sign: GuarantorSigned<(Option<Hash>, AccountRef, Address)>,
         generics: { Address, },
     },
 }
@@ -297,7 +297,7 @@ macro_rules! define_io {
                             let recv = self.send(client, kind, target).await?;
 
                             // recv data
-                            super::response::$case::recv(client, recv).await
+                            super::response::$case::recv(target, recv).await
                         }
 
                         pub async fn send<__IpiisClient>(
@@ -614,12 +614,11 @@ macro_rules! define_io {
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
-                        pub async fn recv<__IpiisClient>(
-                            client: &__IpiisClient,
+                        pub async fn recv(
+                            target: &::ipis::core::account::AccountRef,
                             mut recv: impl ::ipis::tokio::io::AsyncRead + Unpin,
                         ) -> ::ipis::core::anyhow::Result<Self>
                         where
-                            __IpiisClient: super::super::Ipiis,
                             <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
                                     ::ipis::core::account::GuaranteeSigned<String>,
                                     ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
@@ -672,7 +671,7 @@ macro_rules! define_io {
                                 let data = res.__sign.as_ref().await?;
 
                                 // verify it
-                                data.verify(Some(client.account_me().account_ref()))?
+                                data.verify(Some(*target))?
                             };
 
                             Ok(res)
