@@ -5,7 +5,7 @@ use ipiis_common::{define_io, external_call, handle_external_call, ServerResult}
 use ipis::{
     async_trait::async_trait,
     core::{
-        account::{AccountRef, GuaranteeSigned},
+        account::{AccountRef, GuaranteeSigned, GuarantorSigned},
         anyhow::{bail, Result},
     },
     env::Infer,
@@ -159,20 +159,20 @@ handle_external_call!(
 impl PingPongServer {
     async fn handle_ok(
         client: &IpiisServer,
-        mut req: crate::io::request::Ok<'static>,
+        req: crate::io::request::Ok<'static>,
     ) -> Result<crate::io::response::Ok<'static>> {
         // unpack sign
-        let sign_as_guarantee = req.__sign.as_ref().await?;
+        let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // unpack data
-        let name = req.name.as_ref().await?;
-        let age = req.age.as_ref().await?;
+        let name = req.name.into_owned().await?;
+        let age = req.age.into_owned().await?;
 
         // handle data
         let msg = format!("hello, {} years old {}!", &name, age);
 
         // sign data
-        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+        let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
         Ok(crate::io::response::Ok {
@@ -184,11 +184,11 @@ impl PingPongServer {
 
     async fn handle_err(
         _client: &IpiisServer,
-        mut req: crate::io::request::Err<'static>,
+        req: crate::io::request::Err<'static>,
     ) -> Result<crate::io::response::Err<'static>> {
         // unpack data
-        let name = req.name.as_ref().await?;
-        let age = req.age.as_ref().await?;
+        let name = req.name.into_owned().await?;
+        let age = req.age.into_owned().await?;
 
         // handle data
         let msg = format!("hello, {} years old {}!", &name, age);
@@ -199,26 +199,26 @@ impl PingPongServer {
 
     async fn handle_raw(
         client: &IpiisServer,
-        mut recv: impl AsyncRead + Unpin,
+        mut recv: impl AsyncRead + Send + Unpin + 'static,
     ) -> Result<(crate::io::response::Raw<'static>, AccountRef)> {
         // recv request
-        let mut req = crate::io::request::Raw::recv(client, &mut recv).await?;
+        let req = crate::io::request::Raw::recv(client, &mut recv).await?;
 
         // unpack sign
-        let sign_as_guarantee = req.__sign.as_ref().await?;
+        let sign_as_guarantee = req.__sign.into_owned().await?;
 
         // find the guarantee
         let guarantee = sign_as_guarantee.guarantee.account;
 
         // unpack data
-        let name = req.name.as_ref().await?;
-        let age = req.age.as_ref().await?;
+        let name = req.name.into_owned().await?;
+        let age = req.age.into_owned().await?;
 
         // handle data
         let msg = format!("hello, {} years old {}!", &name, age);
 
         // sign data
-        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+        let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
         let res = crate::io::response::Raw {
@@ -240,7 +240,7 @@ define_io! {
         outputs: {
             msg: String,
         },
-        output_sign: GuaranteeSigned<()>,
+        output_sign: GuarantorSigned<()>,
         generics: { },
     },
     Err {
@@ -252,7 +252,7 @@ define_io! {
         outputs: {
             msg: String,
         },
-        output_sign: GuaranteeSigned<()>,
+        output_sign: GuarantorSigned<()>,
         generics: { },
     },
     Raw {
@@ -264,7 +264,7 @@ define_io! {
         outputs: {
             msg: String,
         },
-        output_sign: GuaranteeSigned<()>,
+        output_sign: GuarantorSigned<()>,
         generics: { },
     },
 }

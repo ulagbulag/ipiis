@@ -927,7 +927,7 @@ macro_rules! handle_external_call {
             {
                 use ipis::tokio::io::AsyncWriteExt;
 
-                match Self::__try_handle(&client, &mut send, &mut recv).await {
+                match Self::__try_handle(&client, &mut send, recv).await {
                     Ok(()) => Ok(()),
                     Err(e) => {
                         // collect data
@@ -950,7 +950,7 @@ macro_rules! handle_external_call {
             async fn __try_handle<__IpiisClient>(
                 client: &$client,
                 send: &mut <__IpiisClient as Ipiis>::Writer,
-                recv: &mut <__IpiisClient as Ipiis>::Reader,
+                mut recv: <__IpiisClient as Ipiis>::Reader,
             ) -> Result<()>
             where
                 $client: AsRef<__IpiisClient>,
@@ -959,7 +959,7 @@ macro_rules! handle_external_call {
                 use $io::{OpCode, request};
 
                 // recv opcode
-                let opcode: OpCode = ::ipis::stream::DynStream::recv(&mut *recv)
+                let opcode: OpCode = ::ipis::stream::DynStream::recv(&mut recv)
                     .await?
                     .to_owned()
                     .await?;
@@ -969,10 +969,7 @@ macro_rules! handle_external_call {
                     $(
                         OpCode::$opcode => {
                             // recv request
-                            let mut req = request::$opcode::recv(
-                                client.as_ref(),
-                                &mut *recv,
-                            ).await?;
+                            let mut req = request::$opcode::recv(client.as_ref(), recv).await?;
 
                             // find the guarantee
                             let guarantee = req.__sign.as_ref().await?.guarantee.account;
@@ -987,7 +984,7 @@ macro_rules! handle_external_call {
                     $($(
                         OpCode::$opcode_raw => {
                             // handle raw request
-                            let (mut res, guarantee) = Self::$handler_raw(client, &mut *recv).await?;
+                            let (mut res, guarantee) = Self::$handler_raw(client, recv).await?;
 
                             // send response
                             res.send(client.as_ref(), &guarantee, &mut *send).await
