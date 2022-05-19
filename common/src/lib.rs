@@ -896,7 +896,7 @@ macro_rules! handle_external_call {
         $( request_raw: $io_raw:path => { $( $opcode_raw:ident => $handler_raw:ident ,)* },)?
     ) => {
         impl $server {
-            pub async fn $name(self: &Arc<Self>) {
+            pub async fn $name(self) {
                 let client = self.client.clone();
 
                 let runtime: &IpiisServer = (*self.client).as_ref();

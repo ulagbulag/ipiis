@@ -108,7 +108,6 @@ async fn run_server(port: u16) -> Result<AccountRef> {
     let public_key = server.as_ref().account_me().account_ref();
 
     // accept a single connection
-    let server = Arc::new(server);
     tokio::spawn(async move { server.run().await });
 
     Ok(public_key)
