@@ -1,5 +1,3 @@
-#![feature(more_qualified_paths)]
-
 #[cfg(not(target_os = "wasi"))]
 pub extern crate rustls;
 
@@ -11,72 +9,161 @@ mod wasi;
 
 use std::sync::Arc;
 
-use ipiis_common::{Ipiis, Request, RequestType, Response};
-use ipis::{core::anyhow::Result, pin::Pinned};
+use ipiis_common::{handle_external_call, Ipiis, ServerResult};
+use ipis::core::anyhow::Result;
 
 #[cfg(not(target_os = "wasi"))]
 pub use self::native::*;
 #[cfg(target_os = "wasi")]
 pub use self::wasi::*;
 
-impl AsRef<Self> for crate::client::IpiisClient {
+use crate::{client::IpiisClient, server::IpiisServer};
+
+impl AsRef<Self> for IpiisClient {
     fn as_ref(&self) -> &Self {
         self
     }
 }
 
-impl AsRef<crate::client::IpiisClient> for crate::server::IpiisServer {
-    fn as_ref(&self) -> &crate::client::IpiisClient {
+impl AsRef<IpiisClient> for IpiisServer {
+    fn as_ref(&self) -> &IpiisClient {
         self
     }
 }
 
-impl AsRef<Self> for crate::server::IpiisServer {
+impl AsRef<Self> for IpiisServer {
     fn as_ref(&self) -> &Self {
         self
     }
 }
 
-impl crate::server::IpiisServer {
-    pub async fn run_ipiis(self: &Arc<Self>) {
+handle_external_call!(
+    server: IpiisServer => IpiisServer,
+    request: ::ipiis_common::io => {
+        GetAccountPrimary => handle_get_account_primary,
+        SetAccountPrimary => handle_set_account_primary,
+        GetAddress => handle_get_address,
+        SetAddress => handle_set_address,
+    },
+);
+
+impl IpiisServer {
+    pub async fn run_ipiis(self: Arc<Self>) {
         let client = self.clone();
 
-        self.run(client, Self::handle_ipiis).await
+        self.run(client, Self::__handle::<IpiisClient>).await
     }
 
-    async fn handle_ipiis(
-        client: Arc<crate::server::IpiisServer>,
-        req: Pinned<Request<<crate::client::IpiisClient as Ipiis>::Address>>,
-    ) -> Result<Response<<crate::client::IpiisClient as Ipiis>::Address>> {
-        // TODO: handle without deserializing
-        let req = req.deserialize_into()?;
+    async fn handle_get_account_primary(
+        client: &IpiisServer,
+        mut req: ::ipiis_common::io::request::GetAccountPrimary<
+            'static,
+            <IpiisClient as Ipiis>::Address,
+        >,
+    ) -> Result<
+        ::ipiis_common::io::response::GetAccountPrimary<'static, <IpiisClient as Ipiis>::Address>,
+    > {
+        // unpack sign
+        let sign_as_guarantee = req.__sign.as_ref().await?;
 
-        match req.data.data {
-            RequestType::GetAccountPrimary { kind } => {
-                let account = client.get_account_primary(kind.as_ref()).await?;
-                let address = client.book.get(&account)?;
+        // unpack data
+        let kind = req.kind.as_ref().await?;
 
-                Ok(Response::GetAccountPrimary { account, address })
-            }
-            RequestType::SetAccountPrimary { kind, account } => {
-                req.ensure_self_signed()?;
+        // handle data
+        let account = client.get_account_primary(kind.as_ref()).await?;
+        let address = client.book.get(kind.as_ref(), &account)?;
 
-                client
-                    .set_account_primary(kind.as_ref(), &account)
-                    .await
-                    .map(|()| Response::SetAccountPrimary)
-            }
-            RequestType::GetAddress { account } => Ok(Response::GetAddress {
-                address: client.get_address(&account).await?,
-            }),
-            RequestType::SetAddress { account, address } => {
-                req.ensure_self_signed()?;
+        // sign data
+        let sign = client.sign(sign_as_guarantee.guarantee.account, (account, address))?;
 
-                client
-                    .set_address(&account, &address)
-                    .await
-                    .map(|()| Response::SetAddress)
-            }
-        }
+        // pack data
+        Ok(::ipiis_common::io::response::GetAccountPrimary {
+            __lifetime: Default::default(),
+            __sign: ::ipis::stream::DynStream::Owned(sign),
+            account: ::ipis::stream::DynStream::Owned(account),
+            address: ::ipis::stream::DynStream::Owned(address),
+        })
+    }
+
+    async fn handle_set_account_primary(
+        client: &IpiisServer,
+        mut req: ::ipiis_common::io::request::SetAccountPrimary<'static>,
+    ) -> Result<::ipiis_common::io::response::SetAccountPrimary<'static>> {
+        // unpack sign
+        let sign_as_guarantee = req.__sign.as_ref().await?;
+
+        // verify as root
+        sign_as_guarantee.ensure_self_signed()?;
+
+        // unpack data
+        let kind = req.kind.as_ref().await?;
+        let account = req.account.as_ref().await?;
+
+        // handle data
+        client.set_account_primary(kind.as_ref(), account).await?;
+
+        // sign data
+        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+
+        // pack data
+        Ok(::ipiis_common::io::response::SetAccountPrimary {
+            __lifetime: Default::default(),
+            __sign: ::ipis::stream::DynStream::Owned(sign),
+        })
+    }
+
+    async fn handle_get_address(
+        client: &IpiisServer,
+        mut req: ::ipiis_common::io::request::GetAddress<'static, <IpiisClient as Ipiis>::Address>,
+    ) -> Result<::ipiis_common::io::response::GetAddress<'static, <IpiisClient as Ipiis>::Address>>
+    {
+        // unpack sign
+        let sign_as_guarantee = req.__sign.as_ref().await?;
+
+        // unpack data
+        let kind = req.kind.as_ref().await?;
+        let account = req.account.as_ref().await?;
+
+        // handle data
+        let address = client.get_address(kind.as_ref(), account).await?;
+
+        // sign data
+        let sign = client.sign(sign_as_guarantee.guarantee.account, address)?;
+
+        // pack data
+        Ok(::ipiis_common::io::response::GetAddress {
+            __lifetime: Default::default(),
+            __sign: ::ipis::stream::DynStream::Owned(sign),
+            address: ::ipis::stream::DynStream::Owned(address),
+        })
+    }
+
+    async fn handle_set_address(
+        client: &IpiisServer,
+        mut req: ::ipiis_common::io::request::SetAddress<'static, <IpiisClient as Ipiis>::Address>,
+    ) -> Result<::ipiis_common::io::response::SetAddress<'static, <IpiisClient as Ipiis>::Address>>
+    {
+        // unpack sign
+        let sign_as_guarantee = req.__sign.as_ref().await?;
+
+        // verify as root
+        sign_as_guarantee.ensure_self_signed()?;
+
+        // unpack data
+        let kind = req.kind.as_ref().await?;
+        let account = req.account.as_ref().await?;
+        let address = req.address.as_ref().await?;
+
+        // handle data
+        client.set_address(kind.as_ref(), account, address).await?;
+
+        // sign data
+        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+
+        // pack data
+        Ok(::ipiis_common::io::response::SetAddress {
+            __lifetime: Default::default(),
+            __sign: ::ipis::stream::DynStream::Owned(sign),
+        })
     }
 }

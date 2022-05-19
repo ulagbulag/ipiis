@@ -1,26 +1,21 @@
-use core::pin::Pin;
-
-use bytecheck::CheckBytes;
 use ipis::{
     async_trait::async_trait,
     core::{
-        account::{Account, AccountRef, GuaranteeSigned, GuarantorSigned, Signer, Verifier},
+        account::{Account, AccountRef, GuaranteeSigned, GuarantorSigned, Signer},
         anyhow::Result,
         metadata::Metadata,
         signature::SignatureSerializer,
         value::hash::Hash,
     },
-    pin::{Pinned, PinnedInner},
-    tokio::io::{AsyncRead, AsyncReadExt},
+    tokio::io::{AsyncRead, AsyncWrite},
 };
-use rkyv::{
-    de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
-    Deserialize, Serialize,
-};
+use rkyv::{Archive, Serialize};
 
 #[async_trait]
 pub trait Ipiis {
     type Address: Send + Sync;
+    type Reader: AsyncRead + Send + Unpin + 'static;
+    type Writer: AsyncWrite + Send + Unpin + 'static;
 
     fn account_me(&self) -> &Account;
 
@@ -28,10 +23,15 @@ pub trait Ipiis {
 
     async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()>;
 
-    async fn get_address(&self, target: &AccountRef) -> Result<<Self as Ipiis>::Address>;
+    async fn get_address(
+        &self,
+        kind: Option<&Hash>,
+        target: &AccountRef,
+    ) -> Result<<Self as Ipiis>::Address>;
 
     async fn set_address(
         &self,
+        kind: Option<&Hash>,
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()>;
@@ -52,281 +52,11 @@ pub trait Ipiis {
         Signer::sign(self.account_me(), msg)
     }
 
-    async fn call<'res, Req, Res>(
+    async fn call_raw(
         &self,
+        kind: Option<&Hash>,
         target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        // verify data
-        let () = msg.verify(Some(*target))?;
-
-        // recv data
-        let res = self.call_unchecked(target, msg).await?;
-
-        // verify data
-        let () = res.verify(Some(self.account_me().account_ref()))?;
-
-        Ok(res)
-    }
-
-    async fn call_unchecked<'res, Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        // send data
-        let msg = ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&msg)?;
-
-        // recv data
-        let bytes = self.call_raw_to_end(target, &mut msg.as_ref()).await?;
-
-        // unpack data
-        let res = PinnedInner::<GuaranteeSigned<Res>>::new(bytes)?;
-
-        Ok(res)
-    }
-
-    async fn call_permanent<'res, Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        // sign data
-        let msg = self.sign(*target, msg)?;
-
-        // recv data
-        let res = self.call_unchecked(target, msg).await?;
-
-        // verify data
-        let () = res.verify(Some(self.account_me().account_ref()))?;
-
-        Ok(res)
-    }
-
-    async fn call_permanent_unchecked<'res, Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        // sign data
-        let msg = self.sign(*target, msg)?;
-
-        // recv data
-        self.call_unchecked(target, msg).await
-    }
-
-    async fn call_deserialized<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-        GuaranteeSigned<Res>: Archive,
-        <GuaranteeSigned<Res> as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-    {
-        // recv data
-        let res = self.call_deserialized_unchecked(target, msg).await?;
-
-        // verify data
-        let () = res.verify(Some(self.account_me().account_ref()))?;
-
-        Ok(res)
-    }
-
-    async fn call_deserialized_unchecked<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-        GuaranteeSigned<Res>: Archive,
-        <GuaranteeSigned<Res> as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-    {
-        // recv data
-        self.call_unchecked(target, msg)
-            .await
-            // unpack data
-            .and_then(|e: Pinned<GuaranteeSigned<Res>>| e.deserialize_into())
-    }
-
-    async fn call_permanent_deserialized<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        // recv data
-        let res: GuaranteeSigned<Res> = self
-            .call_permanent_deserialized_unchecked(target, msg)
-            .await?;
-
-        // verify data
-        let () = res.verify(Some(self.account_me().account_ref()))?;
-
-        Ok(res)
-    }
-
-    async fn call_permanent_deserialized_unchecked<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        // sign data
-        let msg = self.sign(*target, msg)?;
-
-        // recv data
-        self.call_deserialized_unchecked::<Req, Res>(target, msg)
-            .await
-    }
-
-    async fn call_raw<Req>(
-        &self,
-        target: &AccountRef,
-        msg: &mut Req,
-    ) -> Result<Pin<Box<dyn AsyncRead + Send>>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin;
-
-    async fn call_raw_exact<Req>(
-        &self,
-        target: &AccountRef,
-        msg: &mut Req,
-        buf: &mut [u8],
-    ) -> Result<usize>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        self.call_raw(target, msg)
-            .await?
-            .read_exact(buf)
-            .await
-            .map_err(Into::into)
-    }
-
-    async fn call_raw_to_end<Req>(&self, target: &AccountRef, msg: &mut Req) -> Result<Vec<u8>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        let mut recv = self.call_raw(target, msg).await?;
-
-        // create a buffer
-        let mut buf = {
-            let len = recv.read_u64().await?;
-            vec![0; len.try_into()?]
-        };
-
-        recv.read_exact(&mut buf).await?;
-        Ok(buf)
-    }
+    ) -> Result<(<Self as Ipiis>::Writer, <Self as Ipiis>::Reader)>;
 }
 
 #[async_trait]
@@ -337,6 +67,8 @@ where
     <IpiisClient as Ipiis>::Address: 'static,
 {
     type Address = <IpiisClient as Ipiis>::Address;
+    type Reader = <IpiisClient as Ipiis>::Reader;
+    type Writer = <IpiisClient as Ipiis>::Writer;
 
     fn account_me(&self) -> &Account {
         (**self).account_me()
@@ -350,16 +82,21 @@ where
         (**self).set_account_primary(kind, account).await
     }
 
-    async fn get_address(&self, target: &AccountRef) -> Result<<Self as Ipiis>::Address> {
-        (**self).get_address(target).await
+    async fn get_address(
+        &self,
+        kind: Option<&Hash>,
+        target: &AccountRef,
+    ) -> Result<<Self as Ipiis>::Address> {
+        (**self).get_address(kind, target).await
     }
 
     async fn set_address(
         &self,
+        kind: Option<&Hash>,
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()> {
-        (**self).set_address(target, address).await
+        (**self).set_address(kind, target, address).await
     }
 
     fn sign<T>(&self, target: AccountRef, msg: T) -> Result<GuaranteeSigned<T>>
@@ -370,290 +107,779 @@ where
         (**self).sign(target, msg)
     }
 
-    async fn call<'res, Req, Res>(
+    async fn call_raw(
         &self,
+        kind: Option<&Hash>,
         target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        (**self).call(target, msg).await
-    }
-
-    async fn call_unchecked<'res, Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        (**self).call_unchecked(target, msg).await
-    }
-
-    async fn call_permanent<'res, Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        (**self).call_permanent(target, msg).await
-    }
-
-    async fn call_permanent_unchecked<'res, Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<Pinned<GuaranteeSigned<Res>>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        (**self).call_permanent_unchecked(target, msg).await
-    }
-
-    async fn call_deserialized<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-        GuaranteeSigned<Res>: Archive,
-        <GuaranteeSigned<Res> as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-    {
-        (**self).call_deserialized(target, msg).await
-    }
-
-    async fn call_deserialized_unchecked<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: GuaranteeSigned<Req>,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-        GuaranteeSigned<Res>: Archive,
-        <GuaranteeSigned<Res> as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-    {
-        (**self).call_deserialized_unchecked(target, msg).await
-    }
-
-    async fn call_permanent_deserialized<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        (**self).call_permanent_deserialized(target, msg).await
-    }
-
-    async fn call_permanent_deserialized_unchecked<Req, Res>(
-        &self,
-        target: &AccountRef,
-        msg: Req,
-    ) -> Result<GuaranteeSigned<Res>>
-    where
-        Req: Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send
-            + Sync,
-        <Req as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        Res: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
-        <Res as Archive>::Archived: for<'a> CheckBytes<DefaultValidator<'a>>
-            + Deserialize<Res, SharedDeserializeMap>
-            + ::core::fmt::Debug
-            + PartialEq,
-    {
-        (**self)
-            .call_permanent_deserialized_unchecked(target, msg)
-            .await
-    }
-
-    async fn call_raw<Req>(
-        &self,
-        target: &AccountRef,
-        msg: &mut Req,
-    ) -> Result<Pin<Box<dyn AsyncRead + Send>>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        (**self).call_raw(target, msg).await
-    }
-
-    async fn call_raw_exact<Req>(
-        &self,
-        target: &AccountRef,
-        msg: &mut Req,
-        buf: &mut [u8],
-    ) -> Result<usize>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        (**self).call_raw_exact(target, msg, buf).await
-    }
-
-    async fn call_raw_to_end<Req>(&self, target: &AccountRef, msg: &mut Req) -> Result<Vec<u8>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
-        (**self).call_raw_to_end(target, msg).await
+    ) -> Result<(<Self as Ipiis>::Writer, <Self as Ipiis>::Reader)> {
+        (**self).call_raw(kind, target).await
     }
 }
 
-pub type Request<Address> = GuaranteeSigned<RequestType<Address>>;
+::ipis::bitflags::bitflags! {
+    pub struct ServerResult: u8 {
+        const ACK = 0b10000000;
+        const OK = 0b01000000;
+        const ERR = 0b00100000;
 
-#[derive(Clone, Debug, PartialEq, Archive, Serialize, Deserialize)]
-#[archive(bound(archive = "
-    <Address as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-",))]
-#[archive_attr(derive(CheckBytes, Debug, PartialEq))]
-pub enum RequestType<Address> {
+        const ACK_OK = Self::ACK.bits | Self::OK.bits;
+        const ACK_ERR = Self::ACK.bits | Self::ERR.bits;
+    }
+}
+
+define_io! {
     GetAccountPrimary {
-        kind: Option<Hash>,
+        inputs: {
+            kind: Option<Hash>,
+        },
+        input_sign: GuaranteeSigned<Option<Hash>>,
+        outputs: {
+            account: AccountRef,
+            address: Option<Address>,
+        },
+        output_sign: GuaranteeSigned<(AccountRef, Option<Address>)>,
+        generics: { Address, },
     },
     SetAccountPrimary {
-        kind: Option<Hash>,
-        account: AccountRef,
+        inputs: {
+            kind: Option<Hash>,
+            account: AccountRef,
+        },
+        input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
+        outputs: { },
+        output_sign: GuaranteeSigned<()>,
+        generics: { },
     },
     GetAddress {
-        account: AccountRef,
+        inputs: {
+            kind: Option<Hash>,
+            account: AccountRef,
+        },
+        input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
+        outputs: {
+            address: Address,
+        },
+        output_sign: GuaranteeSigned<Address>,
+        generics: { Address, },
     },
     SetAddress {
-        account: AccountRef,
-        address: Address,
+        inputs: {
+            kind: Option<Hash>,
+            account: AccountRef,
+            address: Address,
+        },
+        input_sign: GuaranteeSigned<(Option<Hash>, AccountRef, Address)>,
+        outputs: { },
+        output_sign: GuaranteeSigned<()>,
+        generics: { Address, },
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Archive, Serialize, Deserialize)]
-#[archive(bound(archive = "
-    <Address as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-    <Option<Address> as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-",))]
-#[archive_attr(derive(CheckBytes, Debug, PartialEq))]
-pub enum Response<Address> {
-    GetAccountPrimary {
-        account: AccountRef,
-        address: Option<Address>,
-    },
-    SetAccountPrimary,
-    GetAddress {
-        address: Address,
-    },
-    SetAddress,
+#[macro_export]
+macro_rules! define_io {
+    (
+        $($case:ident {
+            inputs: { $( $input_field:ident : $input_ty:ty ,)* },
+            input_sign: $input_sign:ty,
+            outputs: { $( $output_field:ident : $output_ty:ty ,)* },
+            output_sign: $output_sign:ty,
+            generics: { $( $generic:ident ,)* },
+        },)*
+    ) => {::ipis::paste::paste! {
+        pub mod io {
+            use bytecheck::CheckBytes;
+            use rkyv::{Archive, Deserialize, Serialize};
+
+            #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Archive, Serialize, Deserialize)]
+            #[archive(compare(PartialEq))]
+            #[archive_attr(derive(CheckBytes, Copy, Clone, Debug, PartialEq, Eq, Hash))]
+            pub enum OpCode {$(
+                $case,
+            )*}
+
+            impl ::ipis::core::signed::IsSigned for OpCode {}
+
+            pub mod request {
+                use super::super::*;
+
+                $(
+                    pub struct $case<'__io, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                        pub __lifetime: ::core::marker::PhantomData<&'__io ((), $( $generic, )* )>,
+                        pub __sign: ::ipis::stream::DynStream<'__io, $input_sign>,
+                        $(
+                            pub $input_field: ::ipis::stream::DynStream<'__io, $input_ty>,
+                        )*
+                    }
+
+                    impl<'__io, $( $generic, )* > ::ipis::core::signed::IsSigned for $case<'__io, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                    }
+
+                    impl<'__io, $( $generic, )* > $case<'__io, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                        pub async fn call<__IpiisClient>(
+                            &'__io mut self,
+                            client: &__IpiisClient,
+                            kind: Option<&::ipis::core::value::hash::Hash>,
+                            target: &::ipis::core::account::AccountRef,
+                        ) -> ::ipis::core::anyhow::Result<super::response::$case<'static, $( $generic, )* >>
+                        where
+                            __IpiisClient: super::super::Ipiis,
+                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::account::GuaranteeSigned<String>,
+                                    ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                >,
+                            $(
+                                $input_ty: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$input_ty as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $input_ty,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                                )*
+                            $(
+                                $output_ty: ::ipis::rkyv::Archive + ::core::fmt::Debug + PartialEq + 'static,
+                                <$output_ty as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $output_ty,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                            $(
+                                $generic: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + ::core::fmt::Debug
+                                    + PartialEq
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$generic as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $generic,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                        {
+                            use ipis::tokio::io::AsyncReadExt;
+
+                            // send data
+                            let mut recv = self.send(client, kind, target).await?;
+
+                            // recv flag
+                            match super::super::ServerResult::from_bits(recv.read_u8().await?) {
+                                // parse the data
+                                Some(super::super::ServerResult::ACK_OK) => {
+                                    super::response::$case::recv(client, recv).await
+                                }
+                                // parse the error
+                                Some(super::super::ServerResult::ACK_ERR) => {
+                                    // recv data
+                                    let res: String = ::ipis::stream::DynStream::recv(&mut recv)
+                                        .await?
+                                        .to_owned().await?;
+
+                                    // TODO: verify data
+
+                                    ::ipis::core::anyhow::bail!(res)
+                                }
+                                Some(flag) if flag.contains(super::super::ServerResult::ACK) => {
+                                    ::ipis::core::anyhow::bail!("unknown ACK flag: {flag:?}")
+                                }
+                                Some(_) | None => {
+                                    ::ipis::core::anyhow::bail!("cannot parse the result of response")
+                                }
+                            }
+                        }
+
+                        pub async fn send<__IpiisClient>(
+                            &'__io mut self,
+                            client: &__IpiisClient,
+                            kind: Option<&::ipis::core::value::hash::Hash>,
+                            target: &::ipis::core::account::AccountRef,
+                        ) -> ::ipis::core::anyhow::Result<<__IpiisClient as super::super::Ipiis>::Reader>
+                        where
+                            __IpiisClient: super::super::Ipiis,
+                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::account::GuaranteeSigned<String>,
+                                    ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                >,
+                            $(
+                                $input_ty: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$input_ty as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $input_ty,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                                )*
+                            $(
+                                $generic: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + ::core::fmt::Debug
+                                    + PartialEq
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$generic as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $generic,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                        {
+                            use ipis::core::signed::IsSigned;
+
+                            // make a opcode
+                            let mut opcode = ::ipis::stream::DynStream::Owned(super::OpCode::$case);
+
+                            // sign data
+                            let mut sign: ::ipis::stream::DynStream<()> = {
+                                // select the sign data
+                                let data = self.__sign.to_owned().await?;
+
+                                // sign it
+                                if data.is_signed_dyn() {
+                                    ::ipis::stream::DynStream::OwnedAlignedVec(data.to_bytes()?)
+                                } else {
+                                    ::ipis::stream::DynStream::OwnedAlignedVec(client.sign(*target, data)?.to_bytes()?)
+                                }
+                            };
+
+                            // pack data
+                            opcode.serialize_inner().await?;
+                            $(
+                                {
+                                    let () = self.$input_field.serialize_inner().await?;
+                                }
+                            )*
+
+                            // make a connection
+                            let (mut send, recv) = client.call_raw(kind, target).await?;
+
+                            // send opcode
+                            opcode.copy_to(&mut send).await?;
+
+                            // send sign
+                            sign.copy_to(&mut send).await?;
+
+                            // send data
+                            $(
+                                {
+                                    self.$input_field.copy_to(&mut send).await?;
+                                }
+                            )*
+                            Ok(recv)
+                        }
+                    }
+
+                    impl<$( $generic, )* > $case<'static, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                        pub async fn recv<__IpiisClient>(
+                            client: &__IpiisClient,
+                            mut recv: impl ::ipis::tokio::io::AsyncRead + Unpin,
+                        ) -> ::ipis::core::anyhow::Result<Self>
+                        where
+                            __IpiisClient: super::super::Ipiis,
+                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::account::GuaranteeSigned<String>,
+                                    ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                >,
+                            $(
+                                $input_ty: ::ipis::rkyv::Archive + ::core::fmt::Debug + PartialEq + 'static,
+                                <$input_ty as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $input_ty,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                            $(
+                                $generic: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + ::core::fmt::Debug
+                                    + PartialEq
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$generic as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $generic,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                        {
+                            use ipis::core::account::Verifier;
+
+                            // recv data
+                            let mut res = Self {
+                                __lifetime: Default::default(),
+                                __sign: ::ipis::stream::DynStream::recv(&mut recv).await?,
+                                $(
+                                    $input_field: ::ipis::stream::DynStream::recv(&mut recv).await?,
+                                )*
+                            };
+
+                            // verify data
+                            let () = {
+                                // select the sign data
+                                let data = res.__sign.as_ref().await?;
+
+                                // verify it
+                                data.verify(Some(client.account_me().account_ref()))?
+                            };
+
+                            Ok(res)
+                        }
+                    }
+                )*
+            }
+
+            pub mod response {
+                use super::super::*;
+
+                $(
+                    pub struct $case<'__io, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                        pub __lifetime: ::core::marker::PhantomData<&'__io ((), $( $generic, )* )>,
+                        pub __sign: ::ipis::stream::DynStream<'__io, $output_sign>,
+                        $(
+                            pub $output_field: ::ipis::stream::DynStream<'__io, $output_ty>,
+                        )*
+                    }
+
+                    impl<'__io, $( $generic, )* > ::ipis::core::signed::IsSigned for $case<'__io, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                    }
+
+                    impl<'__io, $( $generic, )* > $case<'__io, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                        pub async fn send<__IpiisClient>(
+                            &'__io mut self,
+                            client: &__IpiisClient,
+                            target: &::ipis::core::account::AccountRef,
+                            mut send: &mut <__IpiisClient as super::super::Ipiis>::Writer,
+                        ) -> ::ipis::core::anyhow::Result<()>
+                        where
+                            __IpiisClient: super::super::Ipiis,
+                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::account::GuaranteeSigned<String>,
+                                    ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                >,
+                            $(
+                                $output_ty: ::ipis::rkyv::Archive + ::core::fmt::Debug + PartialEq + 'static,
+                                <$output_ty as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $output_ty,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                            $(
+                                $generic: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + ::core::fmt::Debug
+                                    + PartialEq
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$generic as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $generic,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                        {
+                            use ipis::{
+                                core::signed::IsSigned,
+                                tokio::io::AsyncWriteExt,
+                            };
+
+                            // make a flag
+                            let flag = super::super::ServerResult::ACK_OK;
+
+                            // sign data
+                            let mut sign: ::ipis::stream::DynStream<()> = {
+                                // select the sign data
+                                let data = self.__sign.to_owned().await?;
+
+                                // sign it
+                                if data.is_signed_dyn() {
+                                    ::ipis::stream::DynStream::OwnedAlignedVec(data.to_bytes()?)
+                                } else {
+                                    ::ipis::stream::DynStream::OwnedAlignedVec(client.sign(*target, data)?.to_bytes()?)
+                                }
+                            };
+
+                            // send flag
+                            send.write_u8(flag.bits()).await?;
+
+                            // send flag
+                            sign.copy_to(&mut send).await?;
+
+                            // send data
+                            $(
+                                {
+                                    self.$output_field.copy_to(&mut send).await?;
+                                }
+                            )*
+                            Ok(())
+                        }
+                    }
+
+                    impl<$( $generic, )* > $case<'static, $( $generic, )* >
+                    where
+                        $(
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
+                        )*
+                    {
+                        pub async fn recv<__IpiisClient>(
+                            client: &__IpiisClient,
+                            mut recv: impl ::ipis::tokio::io::AsyncRead + Unpin,
+                        ) -> ::ipis::core::anyhow::Result<Self>
+                        where
+                            __IpiisClient: super::super::Ipiis,
+                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::account::GuaranteeSigned<String>,
+                                    ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                >,
+                            $(
+                                $output_ty: ::ipis::rkyv::Archive + ::core::fmt::Debug + PartialEq + 'static,
+                                <$output_ty as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $output_ty,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                            $(
+                                $generic: ::ipis::core::signed::IsSigned
+                                    + ::ipis::rkyv::Archive
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signature::SignatureSerializer>
+                                    + ::ipis::rkyv::Serialize<::ipis::core::signed::Serializer>
+                                    + ::core::fmt::Debug
+                                    + PartialEq
+                                    + Send
+                                    + Sync
+                                    + 'static,
+                                <$generic as ::ipis::rkyv::Archive>::Archived: for<'__bytecheck> ::ipis::bytecheck::CheckBytes<
+                                        ::ipis::rkyv::validation::validators::DefaultValidator<'__bytecheck>,
+                                    > + ::ipis::rkyv::Deserialize<
+                                        $generic,
+                                        ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
+                                    >
+                                    + ::core::fmt::Debug
+                                    + PartialEq,
+                            )*
+                        {
+                            use ipis::core::account::Verifier;
+
+                            // recv data
+                            let mut res = Self {
+                                __lifetime: Default::default(),
+                                __sign: ::ipis::stream::DynStream::recv(&mut recv).await?,
+                                $(
+                                    $output_field: ::ipis::stream::DynStream::recv(&mut recv).await?,
+                                )*
+                            };
+
+                            // verify data
+                            let () = {
+                                // select the sign data
+                                let data = res.__sign.as_ref().await?;
+
+                                // verify it
+                                data.verify(Some(client.account_me().account_ref()))?
+                            };
+
+                            Ok(res)
+                        }
+                    }
+                )*
+            }
+        }
+    }};
 }
 
-pub type Serializer = ::ipis::rkyv::ser::serializers::AllocSerializer<SERIALIZER_HEAP_SIZE>;
-
-pub const SERIALIZER_HEAP_SIZE: usize = 4096;
-
+/// # External Call
+///
+/// ## Usage
+///
+/// ```ignore
+/// // external call
+/// let (address,): (Option<::std::net::SocketAddr>,) = external_call!(
+///     client: self,
+///     target: None => &primary,
+///     request: ::ipiis_common::io => GetAccountPrimary,
+///     inputs: {
+///         sign: self.sign(primary, Some(*kind))?,
+///         kind: Some(*kind),
+///     },
+///     outputs: { account, address, },
+/// );
+/// ```
+///
 #[macro_export]
 macro_rules! external_call {
     (
-        call: $call:expr,
-        response: $ty:ty => $kind:ident,
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
     ) => {
         external_call!(
-            call: $call,
-            response: $ty => $kind,
-            items: {},
+            client: $client,
+            target: $kind => $target,
+            request: $io => $req,
+            sign: $input_sign,
+            inputs: { $( $input_field : $input_value ,)* },
+            outputs: { },
         )
     };
     (
-        call: $call:expr,
-        response: $ty:ty => $kind:ident,
-        items: { $( $items:ident ),* },
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        outputs: { $( $output:ident ,)* },
     ) => {{
-        let __res: ::ipis::core::account::GuaranteeSigned<$ty> = $call;
+        use ipis::core::signed::IsSigned;
+
+        use $io::{request::$req};
+
+        // sign data
+        let mut sign: ::ipis::stream::DynStream<_> = {
+            // select the sign data
+            let data = $input_sign;
+
+            // sign it
+            if data.is_signed_dyn() {
+                ::ipis::stream::DynStream::OwnedAlignedVec(data.to_bytes()?)
+            } else {
+                ::ipis::stream::DynStream::OwnedAlignedVec($client.sign(*$target, data)?.to_bytes()?)
+            }
+        };
+
+        // pack request
+        #[allow(clippy::redundant_field_names)]
+        let mut req = $req {
+            __lifetime: Default::default(),
+            __sign: sign,
+            $( $input_field: ::ipis::stream::DynStream::Owned($input_value) ,)*
+        };
+
+        // recv response
+        let mut res = req.call($client, $kind, $target).await?;
 
         // unpack response
-        match __res.data.data {
-            <$ty>::$kind { $( $items, )* .. } => ( $( $items, )* ),
-            _ => ::ipis::core::anyhow::bail!("failed to parse response"),
-        }
+        #[allow(clippy::unused_unit)]
+        {( $( res.$output.to_owned().await?, )* )}
     }};
+}
+
+/// # Handling External Call
+///
+/// ## Usage
+///
+/// ```ignore
+/// handle_external_call!(
+///      server: IpiisServer,
+///      name: run_ipiis,
+///      request: ::ipiis_common::io => {
+///          GetAccountPrimary => handle_get_account_primary,
+///          SetAccountPrimary => handle_set_account_primary,
+///          GetAddress => handle_get_address,
+///          SetAddress => handle_set_address,
+///      },
+///  );
+/// ```
+///
+#[macro_export]
+macro_rules! handle_external_call {
+    (
+        server: $server:ty => $client:ty,
+        name: $name:ident,
+        request: $io:path => {
+            $( $opcode:ident => $handler:ident ,)*
+        },
+    ) => {
+        impl $server {
+            pub async fn $name(self: &Arc<Self>) {
+                let client = self.client.clone();
+
+                let runtime: &IpiisServer = (*self.client).as_ref();
+                runtime.run(client, Self::__handle::<IpiisClient>).await
+            }
+        }
+
+        handle_external_call!(
+            server: $server => $client,
+            request: $io => {
+                $( $opcode => $handler ,)*
+            },
+        );
+    };
+    (
+        server: $server:ty => $client:ty,
+        request: $io:path => {
+            $( $opcode:ident => $handler:ident ,)*
+        },
+    ) => {
+        impl $server {
+            async fn __handle<__IpiisClient>(
+                client: Arc<$client>,
+                mut send: <__IpiisClient as Ipiis>::Writer,
+                mut recv: <__IpiisClient as Ipiis>::Reader,
+            ) -> Result<()>
+            where
+                $client: AsRef<__IpiisClient>,
+                __IpiisClient: Ipiis,
+            {
+                use ipis::tokio::io::AsyncWriteExt;
+
+                match Self::__try_handle(&client, &mut send, &mut recv).await {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        // collect data
+                        let mut data = ::ipis::stream::DynStream::Owned(e.to_string());
+
+                        // make a flag
+                        let flag = ServerResult::ACK_ERR;
+
+                        // send flag
+                        send.write_u8(flag.bits()).await?;
+
+                        // send data
+                        data.copy_to(&mut send).await?;
+
+                        Ok(())
+                    }
+                }
+            }
+
+            async fn __try_handle<__IpiisClient>(
+                client: &$client,
+                send: &mut <__IpiisClient as Ipiis>::Writer,
+                recv: &mut <__IpiisClient as Ipiis>::Reader,
+            ) -> Result<()>
+            where
+                $client: AsRef<__IpiisClient>,
+                __IpiisClient: Ipiis,
+            {
+                use $io::{OpCode, request};
+
+                // recv opcode
+                let opcode: OpCode = ::ipis::stream::DynStream::recv(&mut *recv)
+                    .await?
+                    .to_owned()
+                    .await?;
+
+                // select command
+                match opcode {
+                    $(
+                        OpCode::$opcode => {
+                            // recv request
+                            let mut req = request::$opcode::recv(
+                                client.as_ref(),
+                                &mut *recv,
+                            ).await?;
+
+                            // find the guarantee
+                            let guarantee = req.__sign.as_ref().await?.guarantee.account;
+
+                            // handle request
+                            let mut res = Self::$handler(client, req).await?;
+
+                            // send response
+                            res.send(client.as_ref(), &guarantee, &mut *send).await
+                        }
+                    )*
+                }
+            }
+        }
+    };
 }

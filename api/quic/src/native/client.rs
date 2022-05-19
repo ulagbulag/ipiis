@@ -1,17 +1,14 @@
-use core::pin::Pin;
 use std::sync::Arc;
 
-use ipiis_common::{external_call, Ipiis, RequestType, Response};
+use ipiis_common::{external_call, Ipiis};
 use ipis::{
     async_trait::async_trait,
     core::{
-        account::{Account, AccountRef, GuaranteeSigned, Verifier},
+        account::{Account, AccountRef},
         anyhow::{anyhow, bail, Result},
         value::hash::Hash,
     },
     env::{infer, Infer},
-    pin::PinnedInner,
-    tokio::io::{AsyncRead, AsyncReadExt},
 };
 use quinn::{Connection, Endpoint};
 
@@ -93,7 +90,7 @@ impl IpiisClient {
             client.book.set_primary(None, &account_primary)?;
 
             if let Ok(address) = infer("ipiis_account_primary_address") {
-                client.book.set(&account_primary, &address)?;
+                client.book.set(None, &account_primary, &address)?;
             }
         }
 
@@ -104,6 +101,8 @@ impl IpiisClient {
 #[async_trait]
 impl Ipiis for IpiisClient {
     type Address = ::std::net::SocketAddr;
+    type Reader = ::quinn::RecvStream;
+    type Writer = ::quinn::SendStream;
 
     fn account_me(&self) -> &Account {
         &self.book.account_me
@@ -117,24 +116,22 @@ impl Ipiis for IpiisClient {
                     // next target
                     let primary = self.get_account_primary(None).await?;
 
-                    // pack request
-                    let req = RequestType::<<Self as Ipiis>::Address>::GetAccountPrimary {
-                        kind: Some(*kind),
-                    };
-
                     // external call
                     let (account, address) = external_call!(
-                        call: self
-                            .call_permanent_deserialized(&primary, req)
-                            .await?,
-                        response: Response<<Self as Ipiis>::Address> => GetAccountPrimary,
-                        items: { account, address },
+                        client: self,
+                        target: None => &primary,
+                        request: ::ipiis_common::io => GetAccountPrimary,
+                        sign: self.sign(primary, Some(*kind))?,
+                        inputs: {
+                            kind: Some(*kind),
+                        },
+                        outputs: { account, address, },
                     );
 
                     // store response
                     self.book.set_primary(Some(kind), &account)?;
                     if let Some(address) = address {
-                        self.book.set(&account, &address)?;
+                        self.book.set(Some(kind), &account, &address)?;
                     }
 
                     // unpack response
@@ -151,44 +148,46 @@ impl Ipiis for IpiisClient {
         // update server-side if you are a root
         if let Some(primary) = self.book.get_primary(None)? {
             if self.account_me().account_ref() == primary {
-                // pack request
-                let req = RequestType::<<Self as Ipiis>::Address>::SetAccountPrimary {
-                    kind: kind.copied(),
-                    account: *account,
-                };
-
                 // external call
                 let () = external_call!(
-                    call: self
-                        .call_permanent_deserialized(&primary, req)
-                        .await?,
-                    response: Response<<Self as Ipiis>::Address> => SetAccountPrimary,
+                    client: self,
+                    target: None => &primary,
+                    request: ::ipiis_common::io => SetAccountPrimary,
+                    sign: self.sign(primary, (kind.copied(), *account))?,
+                    inputs: {
+                        kind: kind.copied(),
+                        account: *account,
+                    },
                 );
             }
         }
         Ok(())
     }
 
-    async fn get_address(&self, target: &AccountRef) -> Result<<Self as Ipiis>::Address> {
-        match self.book.get(target)? {
+    async fn get_address(
+        &self,
+        kind: Option<&Hash>,
+        target: &AccountRef,
+    ) -> Result<<Self as Ipiis>::Address> {
+        match self.book.get(kind, target)? {
             Some(address) => Ok(address),
             None => match self.book.get_primary(None)? {
                 Some(primary) => {
-                    // pack request
-                    let req =
-                        RequestType::<<Self as Ipiis>::Address>::GetAddress { account: *target };
-
                     // external call
                     let (address,) = external_call!(
-                        call: self
-                            .call_permanent_deserialized(&primary, req)
-                            .await?,
-                        response: Response<<Self as Ipiis>::Address> => GetAddress,
-                        items: { address },
+                        client: self,
+                        target: None => &primary,
+                        request: ::ipiis_common::io => GetAddress,
+                        sign: self.sign(primary, (kind.copied(), *target))?,
+                        inputs: {
+                            kind: kind.copied(),
+                            account: *target,
+                        },
+                        outputs: { address, },
                     );
 
                     // store response
-                    self.book.set(target, &address)?;
+                    self.book.set(kind, target, &address)?;
 
                     // unpack response
                     Ok(address)
@@ -203,91 +202,54 @@ impl Ipiis for IpiisClient {
 
     async fn set_address(
         &self,
+        kind: Option<&Hash>,
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()> {
-        self.book.set(target, address)?;
+        self.book.set(kind, target, address)?;
 
         // update server-side if you are a root
         if let Some(primary) = self.book.get_primary(None)? {
             if self.account_me().account_ref() == primary {
-                // pack request
-                let req = RequestType::<<Self as Ipiis>::Address>::SetAddress {
-                    account: *target,
-                    address: *address,
-                };
-
                 // external call
                 let () = external_call!(
-                    call: self
-                        .call_permanent_deserialized(&primary, req)
-                        .await?,
-                    response: Response<<Self as Ipiis>::Address> => SetAddress,
+                    client: self,
+                    target: None => &primary,
+                    request: ::ipiis_common::io => SetAddress,
+                    sign: self.sign(primary, (kind.copied(), *target, *address))?,
+                    inputs: {
+                        kind: kind.copied(),
+                        account: *target,
+                        address: *address,
+                    },
                 );
             }
         }
         Ok(())
     }
 
-    async fn call_raw<Req>(
+    async fn call_raw(
         &self,
+        kind: Option<&Hash>,
         target: &AccountRef,
-        msg: &mut Req,
-    ) -> Result<Pin<Box<dyn AsyncRead + Send>>>
-    where
-        Req: AsyncRead + Send + Sync + Unpin,
-    {
+    ) -> Result<(<Self as Ipiis>::Writer, <Self as Ipiis>::Reader)> {
         // connect to the target
-        let conn = self.get_connection(target).await?;
-        let (mut send, mut recv) = conn
+        let conn = self.get_connection(kind, target).await?;
+
+        // open stream
+        let (send, recv) = conn
             .open_bi()
             .await
             .map_err(|e| anyhow!("failed to open stream: {e}"))?;
 
         // send data
-        ipis::tokio::io::copy(msg, &mut send)
-            .await
-            .map_err(|e| anyhow!("failed to send request: {e}"))?;
-
-        // finish sending
-        send.finish()
-            .await
-            .map_err(|e| anyhow!("failed to shutdown stream: {e}"))?;
-
-        // receive the result flag
-        match super::flag::Result::from_bits(recv.read_u8().await?) {
-            // be ready for receiving the data
-            Some(super::flag::Result::ACK_OK) => Ok(Box::pin(recv)),
-            // parse the error
-            Some(super::flag::Result::ACK_ERR) => {
-                // create a buffer
-                let mut buf = {
-                    let len = recv.read_u64().await?;
-                    vec![0; len.try_into()?]
-                };
-
-                // recv data
-                recv.read_exact(&mut buf).await?;
-
-                // unpack data
-                let res = PinnedInner::<GuaranteeSigned<String>>::new(buf)?.deserialize_into()?;
-
-                // verify data
-                let () = res.verify(Some(self.account_me().account_ref()))?;
-
-                bail!(res.data.data)
-            }
-            Some(flag) if flag.contains(super::flag::Result::ACK) => {
-                bail!("unknown ACK flag: {flag:?}")
-            }
-            Some(_) | None => bail!("cannot parse the result of response"),
-        }
+        Ok((send, recv))
     }
 }
 
 impl IpiisClient {
-    async fn get_connection(&self, target: &AccountRef) -> Result<Connection> {
-        let addr = self.get_address(target).await?;
+    async fn get_connection(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<Connection> {
+        let addr = self.get_address(kind, target).await?;
         let server_name = cert::get_name(target);
 
         let new_conn = self

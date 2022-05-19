@@ -1,28 +1,18 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use ipiis_common::{Ipiis, Serializer, SERIALIZER_HEAP_SIZE};
+use ipiis_common::Ipiis;
 use ipis::{
     async_trait::async_trait,
-    bytecheck::CheckBytes,
     core::{
-        account::{Account, AccountRef, GuaranteeSigned, Verifier},
+        account::{Account, AccountRef},
         anyhow::{bail, Result},
-        metadata::Metadata,
-        signature::SignatureSerializer,
-        value::chrono::DateTime,
     },
     env::{infer, Infer},
     futures::{Future, StreamExt},
     log::{error, info, warn},
-    pin::{Pinned, PinnedInner},
-    rkyv,
-    tokio::{io::AsyncWriteExt, sync::Mutex},
+    tokio::sync::Mutex,
 };
 use quinn::{Endpoint, Incoming, IncomingBiStreams, ServerConfig};
-use rkyv::{
-    de::deserializers::SharedDeserializeMap, validation::validators::DefaultValidator, Archive,
-    Deserialize, Serialize,
-};
 
 use crate::common::cert;
 
@@ -104,21 +94,18 @@ impl IpiisServer {
         })
     }
 
-    pub async fn run<C, Req, Res, F, Fut>(&self, client: Arc<C>, handler: F)
+    pub async fn run<C, F, Fut>(&self, client: Arc<C>, handler: F)
     where
         C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
-        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
-        <Req as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-        Res: Archive
-            + Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send,
-        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
-        Fut: Future<Output = Result<Res>> + Send,
+        F: Fn(
+                Arc<C>,
+                <crate::client::IpiisClient as Ipiis>::Writer,
+                <crate::client::IpiisClient as Ipiis>::Reader,
+            ) -> Fut
+            + Copy
+            + Send
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send,
     {
         let mut incoming = self.incoming.lock().await;
 
@@ -148,25 +135,22 @@ impl IpiisServer {
         }
     }
 
-    async fn handle_connection<C, Req, Res, F, Fut>(
+    async fn handle_connection<C, F, Fut>(
         client: Arc<C>,
         addr: SocketAddr,
         bi_streams: IncomingBiStreams,
         handler: F,
     ) where
         C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
-        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
-        <Req as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-        Res: Archive
-            + Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send,
-        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
-        Fut: Future<Output = Result<Res>> + Send,
+        F: Fn(
+                Arc<C>,
+                <crate::client::IpiisClient as Ipiis>::Writer,
+                <crate::client::IpiisClient as Ipiis>::Reader,
+            ) -> Fut
+            + Copy
+            + Send
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send,
     {
         match Self::try_handle_connection(client, addr, bi_streams, handler).await {
             Ok(_) => (),
@@ -174,7 +158,7 @@ impl IpiisServer {
         }
     }
 
-    async fn try_handle_connection<C, Req, Res, F, Fut>(
+    async fn try_handle_connection<C, F, Fut>(
         client: Arc<C>,
         addr: SocketAddr,
         mut bi_streams: IncomingBiStreams,
@@ -182,18 +166,15 @@ impl IpiisServer {
     ) -> Result<()>
     where
         C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
-        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
-        <Req as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-        Res: Archive
-            + Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq
-            + Send,
-        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut + Copy + Send + Sync + 'static,
-        Fut: Future<Output = Result<Res>> + Send,
+        F: Fn(
+                Arc<C>,
+                <crate::client::IpiisClient as Ipiis>::Writer,
+                <crate::client::IpiisClient as Ipiis>::Reader,
+            ) -> Fut
+            + Copy
+            + Send
+            + 'static,
+        Fut: Future<Output = Result<()>> + Send,
     {
         while let Some(stream) = bi_streams.next().await {
             match stream {
@@ -216,24 +197,22 @@ impl IpiisServer {
         Ok(())
     }
 
-    async fn handle<C, Req, Res, F, Fut>(
+    async fn handle<C, F, Fut>(
         client: Arc<C>,
         addr: SocketAddr,
-        stream: (quinn::SendStream, quinn::RecvStream),
+        stream: (
+            <crate::client::IpiisClient as Ipiis>::Writer,
+            <crate::client::IpiisClient as Ipiis>::Reader,
+        ),
         handler: F,
     ) where
         C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
-        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
-        <Req as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-        Res: Archive
-            + Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq,
-        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut,
-        Fut: Future<Output = Result<Res>>,
+        F: Fn(
+            Arc<C>,
+            <crate::client::IpiisClient as Ipiis>::Writer,
+            <crate::client::IpiisClient as Ipiis>::Reader,
+        ) -> Fut,
+        Fut: Future<Output = Result<()>>,
     {
         match Self::try_handle(client, stream, handler).await {
             Ok(_) => (),
@@ -241,89 +220,24 @@ impl IpiisServer {
         }
     }
 
-    async fn try_handle<C, Req, Res, F, Fut>(
+    fn try_handle<C, F, Fut>(
         client: Arc<C>,
-        (mut send, recv): (::quinn::SendStream, ::quinn::RecvStream),
+        (send, recv): (
+            <crate::client::IpiisClient as Ipiis>::Writer,
+            <crate::client::IpiisClient as Ipiis>::Reader,
+        ),
         handler: F,
-    ) -> Result<()>
+    ) -> impl Future<Output = Result<()>>
     where
         C: AsRef<crate::client::IpiisClient> + Send + Sync + 'static,
-        Req: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq,
-        <Req as Archive>::Archived:
-            for<'a> CheckBytes<DefaultValidator<'a>> + ::core::fmt::Debug + PartialEq,
-        Res: Archive
-            + Serialize<SignatureSerializer>
-            + Serialize<Serializer>
-            + ::core::fmt::Debug
-            + PartialEq,
-        <Res as Archive>::Archived: ::core::fmt::Debug + PartialEq,
-        F: Fn(Arc<C>, Pinned<GuaranteeSigned<Req>>) -> Fut,
-        Fut: Future<Output = Result<Res>>,
+        F: Fn(
+            Arc<C>,
+            <crate::client::IpiisClient as Ipiis>::Writer,
+            <crate::client::IpiisClient as Ipiis>::Reader,
+        ) -> Fut,
+        Fut: Future<Output = Result<()>>,
     {
-        let ipiis_client: &crate::client::IpiisClient = client.as_ref().as_ref();
-        let account_me = ipiis_client.account_me();
-        let account_ref = account_me.account_ref();
-
-        // recv data
-        let req = recv.read_to_end(usize::MAX).await?;
-
-        // unpack data
-        let req = PinnedInner::<GuaranteeSigned<Req>>::new(req)?;
-        let guarantee: AccountRef = req
-            .guarantee
-            .account
-            .deserialize(&mut SharedDeserializeMap::default())?;
-        let expiration_date: Option<DateTime> = req
-            .data
-            .expiration_date
-            .deserialize(&mut SharedDeserializeMap::default())?;
-
-        // verify data
-        let () = req.verify(Some(account_ref))?;
-
         // handle data
-        let (flag, buf) = match handler(client.clone(), req).await {
-            Ok(res) => {
-                // sign data
-                let res = {
-                    let mut builder = Metadata::builder();
-
-                    if let Some(expiration_date) = expiration_date {
-                        builder = builder.expiration_date(expiration_date);
-                    }
-
-                    builder.build(account_me, guarantee, res)?
-                };
-
-                // pack data
-                let flag = super::flag::Result::ACK_OK;
-                let buf = ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?;
-                (flag, buf)
-            }
-            Err(e) => {
-                // sign data
-                let res = {
-                    let mut builder = Metadata::builder();
-
-                    if let Some(expiration_date) = expiration_date {
-                        builder = builder.expiration_date(expiration_date);
-                    }
-
-                    builder.build(account_me, guarantee, e.to_string())?
-                };
-
-                // pack data
-                let flag = super::flag::Result::ACK_ERR;
-                let buf = ::ipis::rkyv::to_bytes::<_, SERIALIZER_HEAP_SIZE>(&res)?;
-                (flag, buf)
-            }
-        };
-
-        // send response
-        send.write_u8(flag.bits()).await?;
-        send.write_u64(buf.len().try_into()?).await?;
-        send.write_all(&buf).await?;
-        send.finish().await?;
-        Ok(())
+        handler(client, send, recv)
     }
 }

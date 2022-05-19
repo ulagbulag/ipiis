@@ -27,12 +27,14 @@ impl<Address> AddressBook<Address> {
         })
     }
 
-    pub fn get(&self, target: &AccountRef) -> Result<Option<Address>>
+    pub fn get(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<Option<Address>>
     where
         Address: FromStr,
         <Address as FromStr>::Err: ::std::error::Error + Send + Sync + 'static,
     {
-        match self.table.get(target.as_bytes())? {
+        let key = self.to_key_canonical(kind, Some(target));
+
+        match self.table.get(key)? {
             Some(address) => Ok(Some(String::from_utf8(address.to_vec())?.parse()?)),
             None => {
                 if &self.account_me.account_ref() == target {
@@ -45,34 +47,44 @@ impl<Address> AddressBook<Address> {
     }
 
     pub fn get_primary(&self, kind: Option<&Hash>) -> Result<Option<AccountRef>> {
-        let kind = self.unwrap_kind(kind);
+        let key = self.to_key_canonical(kind, None);
 
-        match self.table.get(&**kind)? {
+        match self.table.get(key)? {
             Some(address) => Ok(Some(String::from_utf8(address.to_vec())?.parse()?)),
             None => Ok(None),
         }
     }
 
-    pub fn set(&self, target: &AccountRef, address: &Address) -> Result<()>
+    pub fn set(&self, kind: Option<&Hash>, target: &AccountRef, address: &Address) -> Result<()>
     where
         Address: ToString,
     {
+        let key = self.to_key_canonical(kind, Some(target));
+
         self.table
-            .insert(target.as_bytes(), address.to_string().into_bytes())
+            .insert(key, address.to_string().into_bytes())
             .map(|_| ())
             .map_err(Into::into)
     }
 
     pub fn set_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()> {
-        let kind = self.unwrap_kind(kind);
+        let key = self.to_key_canonical(kind, None);
 
         self.table
-            .insert(&**kind, account.to_string().into_bytes())
+            .insert(key, account.to_string().into_bytes())
             .map(|_| ())
             .map_err(Into::into)
     }
 
-    fn unwrap_kind(&self, kind: Option<&Hash>) -> Hash {
-        kind.copied().unwrap_or_else(|| Hash::with_bytes(&[]))
+    fn to_key_canonical(&self, kind: Option<&Hash>, account: Option<&AccountRef>) -> Vec<u8> {
+        #[allow(clippy::identity_op)]
+        let flag = ((kind.is_some() as u8) << 1) + ((account.is_some() as u8) << 0);
+
+        let kind = kind.map(|e| &***e).unwrap_or_else(|| &[]);
+        let account = account
+            .map(|e| e.as_bytes().as_ref())
+            .unwrap_or_else(|| &[]);
+
+        [&[flag], kind, account].concat()
     }
 }

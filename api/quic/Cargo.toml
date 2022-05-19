@@ -17,12 +17,13 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
 ipiis-common = { path = "../../common" }
 
-bytecheck = "0.6"
-rkyv = { version = "0.7", features = ["archive_be"] }
-
 [target.'cfg(not(target_os = "wasi"))'.dependencies]
 quinn = "0.8"
 rcgen = "0.9"
 rustls = { version = "0.20", features = ["dangerous_configuration"] }
 sled = "0.34"
 tempfile = "3.3"
+
+[dev-dependencies]
+bytecheck = "0.6"
+rkyv = { version = "0.7", features = ["archive_be"] }

@@ -1,18 +1,16 @@
 use std::sync::Arc;
 
-use bytecheck::CheckBytes;
 use ipiis_api_quic::{client::IpiisClient, common::Ipiis, server::IpiisServer};
+use ipiis_common::{define_io, external_call, handle_external_call, ServerResult};
 use ipis::{
-    class::Class,
+    async_trait::async_trait,
     core::{
         account::{AccountRef, GuaranteeSigned},
-        anyhow::Result,
+        anyhow::{bail, Result},
     },
     env::Infer,
-    pin::Pinned,
     tokio,
 };
-use rkyv::{Archive, Deserialize, Serialize};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -21,22 +19,57 @@ async fn main() -> Result<()> {
     let client = run_client(server, 5001).await?;
 
     // create a data
-    let req = Arc::new(Request {
-        name: "Alice".to_string(),
-        age: 42,
-    });
+    let name = "Alice".to_string();
+    let age = 42;
 
     for _ in 0..5 {
-        // recv data
-        let res: GuaranteeSigned<String> = client
-            .call_permanent_deserialized(&server, req.clone())
-            .await?;
+        // handle Ok
+        {
+            // external call
+            let (msg,) = external_call!(
+                client: &client,
+                target: None => &server,
+                request: crate::io => Ok,
+                sign: client.sign(server, ())?,
+                inputs: {
+                    name: "Alice".to_string(),
+                    age: 42,
+                },
+                outputs: { msg, },
+            );
 
-        // verify data
-        assert_eq!(
-            res.data.data,
-            format!("hello, {} years old {}!", &req.name, req.age),
-        );
+            // verify data
+            assert_eq!(msg, format!("hello, {} years old {}!", &name, age));
+        }
+
+        // handle Err
+        {
+            let f_err = || async {
+                // external call
+                let (msg,) = external_call!(
+                    client: &client,
+                    target: None => &server,
+                    request: crate::io => Err,
+                    sign: client.sign(server, ())?,
+                    inputs: {
+                        name: "Alice".to_string(),
+                        age: 42,
+                    },
+                    outputs: { msg, },
+                );
+
+                Result::<_, ::ipis::core::anyhow::Error>::Ok(msg)
+            };
+
+            // external call
+            let msg = f_err().await.expect_err("failed to catch the error");
+
+            // verify data
+            assert_eq!(
+                msg.to_string(),
+                format!("hello, {} years old {}!", &name, age),
+            );
+        }
     }
     Ok(())
 }
@@ -45,40 +78,127 @@ async fn run_client(server: AccountRef, port: u16) -> Result<IpiisClient> {
     // init a client
     let client = IpiisClient::genesis(None).await?;
     client
-        .set_address(&server, &format!("127.0.0.1:{}", port).parse()?)
+        .set_address(None, &server, &format!("127.0.0.1:{}", port).parse()?)
         .await?;
     Ok(client)
 }
 
 async fn run_server(port: u16) -> Result<AccountRef> {
     // init a server
-    let server = IpiisServer::genesis(port).await?;
-    let public_key = server.account_me().account_ref();
+    let server = PingPongServer::genesis(port).await?;
+    let public_key = server.as_ref().account_me().account_ref();
 
     // accept a single connection
     let server = Arc::new(server);
-    tokio::spawn(async move { server.run(server.clone(), handle).await });
+    tokio::spawn(async move { server.run().await });
 
     Ok(public_key)
 }
 
-#[derive(Class, Clone, Debug, PartialEq, Archive, Serialize, Deserialize)]
-#[archive(compare(PartialEq))]
-#[archive_attr(derive(CheckBytes, Debug, PartialEq))]
-pub struct Request {
-    name: String,
-    age: u32,
+pub struct PingPongServer {
+    client: Arc<IpiisServer>,
 }
 
-async fn handle(
-    _server: Arc<IpiisServer>,
-    req: Pinned<GuaranteeSigned<Arc<Request>>>,
-) -> Result<String> {
-    // resolve data
-    let req = &req.data.data;
+impl AsRef<IpiisClient> for PingPongServer {
+    fn as_ref(&self) -> &IpiisClient {
+        &self.client
+    }
+}
 
-    // handle data
-    let res = format!("hello, {} years old {}!", &req.name, req.age);
+#[async_trait]
+impl<'a> Infer<'a> for PingPongServer {
+    type GenesisArgs = <IpiisServer as Infer<'a>>::GenesisArgs;
+    type GenesisResult = Self;
 
-    Ok(res)
+    async fn try_infer() -> Result<Self> {
+        Ok(Self {
+            client: IpiisServer::try_infer().await?.into(),
+        })
+    }
+
+    async fn genesis(
+        args: <Self as Infer<'a>>::GenesisArgs,
+    ) -> Result<<Self as Infer<'a>>::GenesisResult> {
+        Ok(Self {
+            client: IpiisServer::genesis(args).await?.into(),
+        })
+    }
+}
+
+handle_external_call!(
+    server: PingPongServer => IpiisServer,
+    name: run,
+    request: crate::io => {
+        Ok => handle_ok,
+        Err => handle_err,
+    },
+);
+
+impl PingPongServer {
+    async fn handle_ok(
+        client: &IpiisServer,
+        mut req: crate::io::request::Ok<'static>,
+    ) -> Result<crate::io::response::Ok<'static>> {
+        // unpack sign
+        let sign_as_guarantee = req.__sign.as_ref().await?;
+
+        // unpack data
+        let name = req.name.as_ref().await?;
+        let age = req.age.as_ref().await?;
+
+        // handle data
+        let msg = format!("hello, {} years old {}!", &name, age);
+
+        // sign data
+        let sign = client.sign(sign_as_guarantee.guarantee.account, ())?;
+
+        // pack data
+        Ok(crate::io::response::Ok {
+            __lifetime: Default::default(),
+            __sign: ::ipis::stream::DynStream::Owned(sign),
+            msg: ::ipis::stream::DynStream::Owned(msg),
+        })
+    }
+
+    async fn handle_err(
+        _client: &IpiisServer,
+        mut req: crate::io::request::Err<'static>,
+    ) -> Result<crate::io::response::Err<'static>> {
+        // unpack data
+        let name = req.name.as_ref().await?;
+        let age = req.age.as_ref().await?;
+
+        // handle data
+        let msg = format!("hello, {} years old {}!", &name, age);
+
+        // raise an error
+        bail!(msg)
+    }
+}
+
+define_io! {
+    Ok {
+        inputs: {
+            name: String,
+            age: u32,
+        },
+        input_sign: GuaranteeSigned<()>,
+        outputs: {
+            msg: String,
+        },
+        output_sign: GuaranteeSigned<()>,
+        generics: { },
+    },
+    Err {
+        inputs: {
+            name: String,
+            age: u32,
+        },
+        input_sign: GuaranteeSigned<()>,
+        outputs: {
+            msg: String,
+        },
+        output_sign: GuaranteeSigned<()>,
+        generics: { },
+    },
 }
