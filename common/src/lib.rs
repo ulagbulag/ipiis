@@ -739,7 +739,7 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            only_call,
+            outputs: call,
         );
 
         // unpack response
@@ -752,7 +752,7 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        only_call,
+        outputs: call,
     ) => {{
         // pack request
         #[allow(clippy::redundant_field_names)]
@@ -762,7 +762,7 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            no_run,
+            outputs: none,
         );
 
         // recv response
@@ -774,7 +774,7 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        only_send,
+        outputs: send,
     ) => {{
         // pack request
         #[allow(clippy::redundant_field_names)]
@@ -784,7 +784,7 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            no_run,
+            outputs: none,
         );
 
         // recv response
@@ -796,7 +796,7 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        no_run,
+        outputs: none,
     ) => {{
         use ipis::core::signed::IsSigned;
 
