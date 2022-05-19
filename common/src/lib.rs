@@ -711,6 +711,7 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        $( inputs_mode: $mode:ident ,)?
     ) => {
         external_call!(
             client: $client,
@@ -719,6 +720,7 @@ macro_rules! external_call {
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
             outputs: { },
+            $( inputs_mode: $mode ,)?
         )
     };
     (
@@ -728,6 +730,7 @@ macro_rules! external_call {
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
         outputs: { $( $output:ident ,)* },
+        $( inputs_mode: $mode:ident ,)?
     ) => {{
         use ipis::core::signed::IsSigned;
 
@@ -740,6 +743,7 @@ macro_rules! external_call {
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
             outputs: call,
+            $( inputs_mode: $mode ,)?
         );
 
         // unpack response
@@ -752,6 +756,7 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        $( inputs_mode: $mode:ident ,)?
         outputs: call,
     ) => {{
         // pack request
@@ -763,6 +768,7 @@ macro_rules! external_call {
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
             outputs: none,
+            $( inputs_mode: $mode ,)?
         );
 
         // recv response
@@ -774,6 +780,7 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        $( inputs_mode: $mode:ident ,)?
         outputs: send,
     ) => {{
         // pack request
@@ -785,6 +792,7 @@ macro_rules! external_call {
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
             outputs: none,
+            $( inputs_mode: $mode ,)?
         );
 
         // recv response
@@ -796,6 +804,44 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        outputs: none,
+    ) => {{
+        external_call!(
+            client: $client,
+            target: $kind => $target,
+            request: $io => $req,
+            sign: $input_sign,
+            inputs: { $( $input_field : $input_value ,)* },
+            inputs_mode: owned,
+            outputs: none,
+        )
+    }};
+    (
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        inputs_mode: owned,
+        outputs: none,
+    ) => {{
+        external_call!(
+            client: $client,
+            target: $kind => $target,
+            request: $io => $req,
+            sign: $input_sign,
+            inputs: { $( $input_field : ::ipis::stream::DynStream::Owned($input_value) ,)* },
+            inputs_mode: none,
+            outputs: none,
+        )
+    }};
+    (
+        client: $client:expr,
+        target: $kind:expr => $target:expr,
+        request: $io:path => $req:ident,
+        sign: $input_sign:expr,
+        inputs: { $( $input_field:ident : $input_value:expr ,)* },
+        inputs_mode: none,
         outputs: none,
     ) => {{
         use ipis::core::signed::IsSigned;
@@ -820,7 +866,7 @@ macro_rules! external_call {
         $req {
             __lifetime: Default::default(),
             __sign: sign,
-            $( $input_field: ::ipis::stream::DynStream::Owned($input_value) ,)*
+            $( $input_field: $input_value ,)*
         }
     }};
 }
