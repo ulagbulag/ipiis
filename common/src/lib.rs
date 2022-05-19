@@ -739,7 +739,6 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: { $( $output ,)* },
             only_call,
         );
 
@@ -753,7 +752,6 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        outputs: { $( $output:ident ,)* },
         only_call,
     ) => {{
         // pack request
@@ -764,7 +762,6 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: { $( $output ,)* },
             no_run,
         );
 
@@ -777,7 +774,6 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        outputs: { $( $output:ident ,)* },
         only_send,
     ) => {{
         // pack request
@@ -788,7 +784,6 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: { $( $output ,)* },
             no_run,
         );
 
@@ -801,7 +796,6 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        outputs: { $( $output:ident ,)* },
         no_run,
     ) => {{
         use ipis::core::signed::IsSigned;
