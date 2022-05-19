@@ -729,8 +729,8 @@ macro_rules! external_call {
         request: $io:path => $req:ident,
         sign: $input_sign:expr,
         inputs: { $( $input_field:ident : $input_value:expr ,)* },
-        outputs: { $( $output:ident ,)* },
         $( inputs_mode: $mode:ident ,)?
+        outputs: { $( $output:ident ,)* },
     ) => {{
         use ipis::core::signed::IsSigned;
 
