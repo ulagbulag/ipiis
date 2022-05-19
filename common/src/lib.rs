@@ -349,29 +349,14 @@ macro_rules! define_io {
                                     + PartialEq,
                             )*
                         {
-                            use ipis::{
-                                core::signed::IsSigned,
-                                tokio::io::AsyncReadExt,
-                            };
+                            use ipis::tokio::io::AsyncReadExt;
 
                             // make a opcode
                             let mut opcode = ::ipis::stream::DynStream::Owned(super::OpCode::$case);
 
-                            // sign data
-                            let mut sign: ::ipis::stream::DynStream<()> = {
-                                // select the sign data
-                                let data = self.__sign.to_owned().await?;
-
-                                // sign it
-                                if data.is_signed_dyn() {
-                                    ::ipis::stream::DynStream::OwnedAlignedVec(data.to_bytes()?)
-                                } else {
-                                    ::ipis::stream::DynStream::OwnedAlignedVec(client.sign(*target, data)?.to_bytes()?)
-                                }
-                            };
-
                             // pack data
-                            opcode.serialize_inner().await?;
+                            let () = opcode.serialize_inner().await?;
+                            let () = self.__sign.serialize_inner().await?;
                             $(
                                 {
                                     let () = self.$input_field.serialize_inner().await?;
@@ -385,7 +370,7 @@ macro_rules! define_io {
                             opcode.copy_to(&mut send).await?;
 
                             // send sign
-                            sign.copy_to(&mut send).await?;
+                            self.__sign.copy_to(&mut send).await?;
 
                             // send data
                             $(
@@ -529,8 +514,7 @@ macro_rules! define_io {
                     {
                         pub async fn send<__IpiisClient>(
                             &'__io mut self,
-                            client: &__IpiisClient,
-                            target: &::ipis::core::account::AccountRef,
+                            _client: &__IpiisClient,
                             mut send: &mut <__IpiisClient as super::super::Ipiis>::Writer,
                         ) -> ::ipis::core::anyhow::Result<()>
                         where
@@ -570,32 +554,16 @@ macro_rules! define_io {
                                     + PartialEq,
                             )*
                         {
-                            use ipis::{
-                                core::signed::IsSigned,
-                                tokio::io::AsyncWriteExt,
-                            };
+                            use ipis::tokio::io::AsyncWriteExt;
 
                             // make a flag
                             let flag = super::super::ServerResult::ACK_OK;
 
-                            // sign data
-                            let mut sign: ::ipis::stream::DynStream<()> = {
-                                // select the sign data
-                                let data = self.__sign.to_owned().await?;
-
-                                // sign it
-                                if data.is_signed_dyn() {
-                                    ::ipis::stream::DynStream::OwnedAlignedVec(data.to_bytes()?)
-                                } else {
-                                    ::ipis::stream::DynStream::OwnedAlignedVec(client.sign(*target, data)?.to_bytes()?)
-                                }
-                            };
-
                             // send flag
                             send.write_u8(flag.bits()).await?;
 
-                            // send flag
-                            sign.copy_to(&mut send).await?;
+                            // send sign
+                            self.__sign.copy_to(&mut send).await?;
 
                             // send data
                             $(
@@ -854,7 +822,7 @@ macro_rules! external_call {
 
             // sign it
             if data.is_signed_dyn() {
-                ::ipis::stream::DynStream::OwnedAlignedVec(data.to_bytes()?)
+                ::ipis::stream::DynStream::Owned(data)
             } else {
                 ::ipis::stream::DynStream::OwnedAlignedVec($client.sign(*$target, data)?.to_bytes()?)
             }
@@ -971,23 +939,20 @@ macro_rules! handle_external_call {
                             // recv request
                             let mut req = request::$opcode::recv(client.as_ref(), recv).await?;
 
-                            // find the guarantee
-                            let guarantee = req.__sign.as_ref().await?.guarantee.account;
-
                             // handle request
                             let mut res = Self::$handler(client, req).await?;
 
                             // send response
-                            res.send(client.as_ref(), &guarantee, &mut *send).await
+                            res.send(client.as_ref(), &mut *send).await
                         }
                     )*
                     $($(
                         OpCode::$opcode_raw => {
                             // handle raw request
-                            let (mut res, guarantee) = Self::$handler_raw(client, recv).await?;
+                            let mut res = Self::$handler_raw(client, recv).await?;
 
                             // send response
-                            res.send(client.as_ref(), &guarantee, &mut *send).await
+                            res.send(client.as_ref(), &mut *send).await
                         },
                     )*)?
                 }

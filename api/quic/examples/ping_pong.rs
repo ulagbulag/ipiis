@@ -199,15 +199,12 @@ impl PingPongServer {
     async fn handle_raw(
         client: &IpiisServer,
         mut recv: impl AsyncRead + Send + Unpin + 'static,
-    ) -> Result<(crate::io::response::Raw<'static>, AccountRef)> {
+    ) -> Result<crate::io::response::Raw<'static>> {
         // recv request
         let req = crate::io::request::Raw::recv(client, &mut recv).await?;
 
         // unpack sign
         let sign_as_guarantee = req.__sign.into_owned().await?;
-
-        // find the guarantee
-        let guarantee = sign_as_guarantee.guarantee.account;
 
         // unpack data
         let name = req.name.into_owned().await?;
@@ -220,12 +217,11 @@ impl PingPongServer {
         let sign = client.sign_as_guarantor(sign_as_guarantee)?;
 
         // pack data
-        let res = crate::io::response::Raw {
+        Ok(crate::io::response::Raw {
             __lifetime: Default::default(),
             __sign: ::ipis::stream::DynStream::Owned(sign),
             msg: ::ipis::stream::DynStream::Owned(msg),
-        };
-        Ok((res, guarantee))
+        })
     }
 }
 
