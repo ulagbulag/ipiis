@@ -719,8 +719,8 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: { },
             $( inputs_mode: $mode ,)?
+            outputs: { },
         )
     };
     (
@@ -742,8 +742,8 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: call,
             $( inputs_mode: $mode ,)?
+            outputs: call,
         );
 
         // unpack response
@@ -767,8 +767,8 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: none,
             $( inputs_mode: $mode ,)?
+            outputs: none,
         );
 
         // recv response
@@ -791,8 +791,8 @@ macro_rules! external_call {
             request: $io => $req,
             sign: $input_sign,
             inputs: { $( $input_field : $input_value ,)* },
-            outputs: none,
             $( inputs_mode: $mode ,)?
+            outputs: none,
         );
 
         // recv response
