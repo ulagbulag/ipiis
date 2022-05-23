@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use ipiis_common::{external_call, Ipiis};
 use ipis::{
@@ -52,7 +52,15 @@ impl IpiisClient {
                 .with_safe_defaults()
                 .with_custom_certificate_verifier(super::cert::ServerVerification::new())
                 .with_no_client_auth();
-            let client_config = ::quinn::ClientConfig::new(Arc::new(crypto));
+            let client_config = {
+                let mut config = ::quinn::ClientConfig::new(Arc::new(crypto));
+                config.transport = {
+                    let mut config = Arc::try_unwrap(config.transport).unwrap();
+                    config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
+                    config.into()
+                };
+                config
+            };
 
             let addr = "0.0.0.0:0".parse()?;
 

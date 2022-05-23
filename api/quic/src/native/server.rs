@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use ipiis_common::Ipiis;
 use ipis::{
@@ -72,7 +72,14 @@ impl IpiisServer {
             let server_config = {
                 let (priv_key, cert_chain) = cert::generate(&account_me)?;
 
-                ServerConfig::with_single_cert(cert_chain, priv_key)?
+                let mut config = ServerConfig::with_single_cert(cert_chain, priv_key)?;
+                config.transport = {
+                    let mut config = Arc::try_unwrap(config.transport).unwrap();
+                    config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
+                    config.keep_alive_interval(Some(Duration::from_secs(5)));
+                    config.into()
+                };
+                config
             };
             let addr = format!("0.0.0.0:{port}").parse()?;
 
