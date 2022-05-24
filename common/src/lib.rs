@@ -368,11 +368,11 @@ macro_rules! define_io {
                             )*
 
                             // recv flag
-                            match super::super::ServerResult::from_bits(recv.read_u8().await?) {
+                            match recv.read_u8().await.map(super::super::ServerResult::from_bits) {
                                 // parse the data
-                                Some(super::super::ServerResult::ACK_OK) => Ok(recv),
+                                Ok(Some(super::super::ServerResult::ACK_OK)) => Ok(recv),
                                 // parse the error
-                                Some(super::super::ServerResult::ACK_ERR) => {
+                                Ok(Some(super::super::ServerResult::ACK_ERR)) => {
                                     // recv data
                                     let res: String = ::ipis::stream::DynStream::recv(&mut recv)
                                         .await?
@@ -382,11 +382,14 @@ macro_rules! define_io {
 
                                     ::ipis::core::anyhow::bail!(res)
                                 }
-                                Some(flag) if flag.contains(super::super::ServerResult::ACK) => {
+                                Ok(Some(flag)) if flag.contains(super::super::ServerResult::ACK) => {
                                     ::ipis::core::anyhow::bail!("unknown ACK flag: {flag:?}")
                                 }
-                                Some(_) | None => {
+                                Ok(Some(_) | None) => {
                                     ::ipis::core::anyhow::bail!("cannot parse the result of response")
+                                }
+                                Err(e) => {
+                                    ::ipis::core::anyhow::bail!("internal error: {e:?}")
                                 }
                             }
                         }
