@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Instant};
 
 use clap::{Parser, Subcommand};
 use ipiis_api::{
@@ -14,12 +14,10 @@ use ipis::{
         anyhow::Result,
     },
     env::Infer,
+    futures,
     log::info,
     stream::DynStream,
-    tokio::{
-        self,
-        io::{AsyncRead, AsyncReadExt},
-    },
+    tokio::{self, io::AsyncRead},
 };
 use rand::{distributions::Uniform, Rng};
 
@@ -77,7 +75,7 @@ impl IpiisBenchServer {
             DynStream::recv(&mut recv).await?.into_owned().await?;
 
         // recv data
-        let len = recv.read_u64().await?;
+        let _ = DynStream::<Vec<u8>>::recv(recv).await?;
 
         // sign data
         let sign = client.sign_as_guarantor(sign_as_guarantee)?;
@@ -86,10 +84,6 @@ impl IpiisBenchServer {
         Ok(::ipiis_modules_bench_common::io::response::Ping {
             __lifetime: Default::default(),
             __sign: ::ipis::stream::DynStream::Owned(sign),
-            data: ::ipis::stream::DynStream::Stream {
-                len,
-                recv: Box::pin(recv),
-            },
         })
     }
 }
@@ -116,6 +110,10 @@ enum Commands {
         /// Size of benchmarking stream
         #[clap(short, long, default_value_t = 1_000_000_000)]
         size: usize,
+
+        /// Number of threads
+        #[clap(short, long, default_value_t = 20)]
+        num_threads: u32,
     },
     Server {
         /// Address of the server
@@ -141,6 +139,7 @@ async fn main() -> Result<()> {
             account,
             address,
             size,
+            num_threads,
         } => {
             // create a client
             let client = IpiisClient::genesis(None).await?;
@@ -153,18 +152,32 @@ async fn main() -> Result<()> {
                 .set_address(KIND.as_ref(), &account.account_ref(), &address)
                 .await?;
 
+            // print the configuration
+            info!("- Account: {}", account.to_string());
+            info!("- Address: {address}");
+            info!("- Data Size: {size}B");
+            info!("- Number of Threads: {num_threads}");
+
             // init data
             info!("- Initializing...");
             let range = Uniform::from(0..=255);
-            let data = ::rand::thread_rng()
-                .sample_iter(&range)
-                .take(size)
-                .collect();
-            let data = DynStream::OwnedVec(data);
+            let data: Arc<Vec<u8>> = Arc::new(
+                ::rand::thread_rng()
+                    .sample_iter(&range)
+                    .take(size)
+                    .collect(),
+            );
 
             // begin benchmaring
             info!("- Benchmarking...");
-            let duration = client.ping(data).await?;
+            let instant = Instant::now();
+            {
+                futures::future::try_join_all(
+                    (0..num_threads).map(|_| client.ping(DynStream::ArcVec(data.clone()))),
+                )
+                .await?;
+            }
+            let duration = instant.elapsed();
 
             // print the output
             info!("- Finished!");
@@ -176,7 +189,7 @@ async fn main() -> Result<()> {
             // create a server
             let server = IpiisBenchServer::genesis(port).await?;
 
-            // print the account
+            // print the configuration
             info!("- Account: {}", server.account_me().to_string());
             info!("- Address: {address}:{port}");
 
