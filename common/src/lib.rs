@@ -389,7 +389,7 @@ macro_rules! define_io {
                                     ::ipis::core::anyhow::bail!("cannot parse the result of response")
                                 }
                                 Err(e) => {
-                                    ::ipis::core::anyhow::bail!("internal error: {e:?}")
+                                    ::ipis::core::anyhow::bail!("internal error: {e}")
                                 }
                             }
                         }
