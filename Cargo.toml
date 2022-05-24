@@ -1,4 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["api", "api/quic", "common", "pallet", "runtime"]
+members = [
+    "api",
+    "api/quic",
+    "common",
+    "modules/bench/common",
+    "modules/bench/server",
+    "pallet",
+    "runtime",
+]
 default-members = ["runtime"]
