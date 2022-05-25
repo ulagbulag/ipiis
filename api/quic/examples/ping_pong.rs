@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use ipiis_api_quic::{client::IpiisClient, common::Ipiis, server::IpiisServer};
-use ipiis_common::{define_io, external_call, handle_external_call, ServerResult};
+use ipiis_common::{define_io, external_call, handle_external_call, ServerResult, CLIENT_DUMMY};
 use ipis::{
     async_trait::async_trait,
     core::{
@@ -30,7 +30,7 @@ async fn main() -> Result<()> {
                 client: &client,
                 target: None => &server,
                 request: crate::io => Ok,
-                sign: client.sign(server, ())?,
+                sign: client.sign(server, CLIENT_DUMMY)?,
                 inputs: {
                     name: "Alice".to_string(),
                     age: 42,
@@ -50,7 +50,7 @@ async fn main() -> Result<()> {
                     client: &client,
                     target: None => &server,
                     request: crate::io => Err,
-                    sign: client.sign(server, ())?,
+                    sign: client.sign(server, CLIENT_DUMMY)?,
                     inputs: {
                         name: "Alice".to_string(),
                         age: 42,
@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
                 client: &client,
                 target: None => &server,
                 request: crate::io => Raw,
-                sign: client.sign(server, ())?,
+                sign: client.sign(server, CLIENT_DUMMY)?,
                 inputs: {
                     name: "Alice".to_string(),
                     age: 42,
@@ -231,11 +231,11 @@ define_io! {
             name: String,
             age: u32,
         },
-        input_sign: GuaranteeSigned<()>,
+        input_sign: GuaranteeSigned<u8>,
         outputs: {
             msg: String,
         },
-        output_sign: GuarantorSigned<()>,
+        output_sign: GuarantorSigned<u8>,
         generics: { },
     },
     Err {
@@ -243,11 +243,11 @@ define_io! {
             name: String,
             age: u32,
         },
-        input_sign: GuaranteeSigned<()>,
+        input_sign: GuaranteeSigned<u8>,
         outputs: {
             msg: String,
         },
-        output_sign: GuarantorSigned<()>,
+        output_sign: GuarantorSigned<u8>,
         generics: { },
     },
     Raw {
@@ -255,11 +255,11 @@ define_io! {
             name: String,
             age: u32,
         },
-        input_sign: GuaranteeSigned<()>,
+        input_sign: GuaranteeSigned<u8>,
         outputs: {
             msg: String,
         },
-        output_sign: GuarantorSigned<()>,
+        output_sign: GuarantorSigned<u8>,
         generics: { },
     },
 }

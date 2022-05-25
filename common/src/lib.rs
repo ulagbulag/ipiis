@@ -116,7 +116,9 @@ where
     }
 }
 
+pub const CLIENT_DUMMY: u8 = 42;
 ::ipis::bitflags::bitflags! {
+
     pub struct ServerResult: u8 {
         const ACK = 0b10000000;
         const OK = 0b01000000;
