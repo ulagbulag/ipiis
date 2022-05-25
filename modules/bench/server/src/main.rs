@@ -71,7 +71,7 @@ impl IpiisBenchServer {
         R: AsyncRead + Send + Unpin + 'static,
     {
         // recv sign
-        let sign_as_guarantee: GuaranteeSigned<()> =
+        let sign_as_guarantee: GuaranteeSigned<u8> =
             DynStream::recv(&mut recv).await?.into_owned().await?;
 
         // recv data

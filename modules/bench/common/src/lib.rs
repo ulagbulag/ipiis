@@ -27,7 +27,7 @@ where
             client: self,
             target: KIND.as_ref() => &target,
             request: crate::io => Ping,
-            sign: self.sign(target, ())?,
+            sign: self.sign(target, 42)?,
             inputs: {
                 data: data,
             },
@@ -45,9 +45,9 @@ define_io! {
         inputs: {
             data: Vec<u8>,
         },
-        input_sign: GuaranteeSigned<()>,
+        input_sign: GuaranteeSigned<u8>,
         outputs: { },
-        output_sign: GuarantorSigned<()>,
+        output_sign: GuarantorSigned<u8>,
         generics: { },
     },
 }

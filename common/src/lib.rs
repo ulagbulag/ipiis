@@ -380,7 +380,7 @@ macro_rules! define_io {
 
                                     // TODO: verify data
 
-                                    ::ipis::core::anyhow::bail!(res)
+                                    ::ipis::core::anyhow::bail!("internal error: {res}")
                                 }
                                 Ok(Some(flag)) if flag.contains(super::super::ServerResult::ACK) => {
                                     ::ipis::core::anyhow::bail!("unknown ACK flag: {flag:?}")
@@ -389,7 +389,7 @@ macro_rules! define_io {
                                     ::ipis::core::anyhow::bail!("cannot parse the result of response")
                                 }
                                 Err(e) => {
-                                    ::ipis::core::anyhow::bail!("internal error: {e}")
+                                    ::ipis::core::anyhow::bail!("network error: {e}")
                                 }
                             }
                         }
