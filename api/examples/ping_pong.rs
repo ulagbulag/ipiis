@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
-use ipiis_api_quic::{client::IpiisClient, common::Ipiis, server::IpiisServer};
-use ipiis_common::{define_io, external_call, handle_external_call, ServerResult, CLIENT_DUMMY};
+use ipiis_api::{
+    client::IpiisClient,
+    common::{define_io, external_call, handle_external_call, Ipiis, ServerResult, CLIENT_DUMMY},
+    server::IpiisServer,
+};
 use ipis::{
     async_trait::async_trait,
     core::{
@@ -15,8 +18,8 @@ use ipis::{
 #[tokio::main]
 async fn main() -> Result<()> {
     // init peers
-    let server = run_server(5001).await?;
-    let client = run_client(server, 5001).await?;
+    let server = run_server(5002).await?;
+    let client = run_client(server, 5002).await?;
 
     // create a data
     let name = "Alice".to_string();
@@ -67,7 +70,7 @@ async fn main() -> Result<()> {
             // verify data
             assert_eq!(
                 msg.to_string(),
-                format!("hello, {} years old {}!", &name, age),
+                format!("internal error: hello, {} years old {}!", &name, age),
             );
         }
 

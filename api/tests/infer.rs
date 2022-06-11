@@ -1,5 +1,4 @@
-use ipiis_api_quic::client::IpiisClient;
-use ipiis_common::Ipiis;
+use ipiis_api::{client::IpiisClient, common::Ipiis};
 use ipis::{core::account::Account, env::Infer, tokio};
 
 #[tokio::test]

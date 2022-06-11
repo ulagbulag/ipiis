@@ -1,5 +1,4 @@
-use std::{sync::Arc, time::Duration};
-
+use ipiis_api_common::book::AddressBook;
 use ipiis_common::{external_call, Ipiis};
 use ipis::{
     async_trait::async_trait,
@@ -9,15 +8,12 @@ use ipis::{
         value::hash::Hash,
     },
     env::{infer, Infer},
+    tokio,
 };
-use quinn::{Connection, Endpoint};
-
-use crate::{book::AddressBook, common::cert};
 
 #[derive(Clone)]
 pub struct IpiisClient {
     pub(crate) book: AddressBook<<Self as Ipiis>::Address>,
-    endpoint: Endpoint,
 }
 
 #[async_trait]
@@ -40,57 +36,26 @@ impl<'a> Infer<'a> for IpiisClient {
         // generate an account
         let account = Account::generate();
 
-        // init a server
+        // init an endpoint
         Self::new(account, account_primary).await
     }
 }
 
 impl IpiisClient {
     pub async fn new(account_me: Account, account_primary: Option<AccountRef>) -> Result<Self> {
-        let endpoint = {
-            let crypto = ::rustls::ClientConfig::builder()
-                .with_safe_defaults()
-                .with_custom_certificate_verifier(super::cert::ServerVerification::new())
-                .with_no_client_auth();
-            let client_config = {
-                let mut config = ::quinn::ClientConfig::new(Arc::new(crypto));
-                config.transport = {
-                    let mut config = Arc::try_unwrap(config.transport).unwrap();
-                    config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
-                    config.into()
-                };
-                config
-            };
-
-            let addr = "0.0.0.0:0".parse()?;
-
-            let mut endpoint = Endpoint::client(addr)?;
-            endpoint.set_default_client_config(client_config);
-
-            endpoint
-        };
-
-        Self::with_address_db_path(
-            account_me,
-            account_primary,
-            "ipiis_client_address_db",
-            endpoint,
-        )
-        .await
+        Self::with_address_db_path(account_me, account_primary, "ipiis_client_address_db").await
     }
 
     pub(crate) async fn with_address_db_path<P>(
         account_me: Account,
         account_primary: Option<AccountRef>,
         book_path: P,
-        endpoint: Endpoint,
     ) -> Result<Self>
     where
         P: AsRef<::std::path::Path>,
     {
         let client = Self {
             book: AddressBook::new(account_me, book_path)?,
-            endpoint,
         };
 
         // try to add the primary account's address
@@ -109,8 +74,8 @@ impl IpiisClient {
 #[async_trait]
 impl Ipiis for IpiisClient {
     type Address = ::std::net::SocketAddr;
-    type Reader = ::quinn::RecvStream;
-    type Writer = ::quinn::SendStream;
+    type Reader = tokio::io::ReadHalf<tokio::net::TcpStream>;
+    type Writer = tokio::io::WriteHalf<tokio::net::TcpStream>;
 
     fn account_me(&self) -> &Account {
         &self.book.account_me
@@ -233,10 +198,7 @@ impl Ipiis for IpiisClient {
         let conn = self.get_connection(kind, target).await?;
 
         // open stream
-        let (send, recv) = conn
-            .open_bi()
-            .await
-            .map_err(|e| anyhow!("failed to open stream: {e}"))?;
+        let (recv, send) = tokio::io::split(conn);
 
         // send data
         Ok((send, recv))
@@ -244,20 +206,18 @@ impl Ipiis for IpiisClient {
 }
 
 impl IpiisClient {
-    async fn get_connection(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<Connection> {
+    async fn get_connection(
+        &self,
+        kind: Option<&Hash>,
+        target: &AccountRef,
+    ) -> Result<tokio::net::TcpStream> {
         let addr = self.get_address(kind, target).await?;
-        let server_name = cert::get_name(target);
 
-        let new_conn = self
-            .endpoint
-            .connect(addr, &server_name)?
+        let new_conn = tokio::net::TcpSocket::new_v4()?
+            .connect(addr)
             .await
             .map_err(|e| anyhow!("failed to connect: {e}"))?;
 
-        let quinn::NewConnection {
-            connection: conn, ..
-        } = new_conn;
-
-        Ok(conn)
+        Ok(new_conn)
     }
 }

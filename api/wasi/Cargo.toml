@@ -1,5 +1,5 @@
 [package]
-name = "ipiis-api-quic"
+name = "ipiis-api-wasi"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,9 +15,4 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 
 [dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
-ipiis-api-common = { path = "../common" }
 ipiis-common = { path = "../../common" }
-
-quinn = "0.8"
-rcgen = "0.9"
-rustls = { version = "0.20", features = ["dangerous_configuration"] }

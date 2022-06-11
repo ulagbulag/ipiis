@@ -14,11 +14,20 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = ["quic"]
+default = ["tcp"]
 quic = ["ipiis-api-quic"]
+tcp = ["ipiis-api-tcp"]
 
-[dependencies]
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
 ipiis-api-quic = { path = "./quic", optional = true }
+ipiis-api-tcp = { path = "./tcp", optional = true }
+ipiis-common = { path = "../common" }
+
+[target.'cfg(target_os = "wasi")'.dependencies]
+ipiis-api-wasi = { path = "./wasi" }
 
 [dev-dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
+
+bytecheck = "0.6"
+rkyv = { version = "0.7", features = ["archive_be"] }

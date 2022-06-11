@@ -1,9 +1,14 @@
+use std::{sync::Arc, time::SystemTime};
+
 use ipis::core::{
     account::{Account, AccountRef},
     anyhow::{anyhow, Result},
     ed25519_dalek::ed25519::{pkcs8::EncodePrivateKey, KeypairBytes},
 };
-use rustls::{Certificate, PrivateKey};
+use rustls::{
+    client::{ServerCertVerified, ServerCertVerifier},
+    Certificate, Error, PrivateKey, ServerName,
+};
 
 pub fn get_name(account: &AccountRef) -> String {
     let account = account.to_string();
@@ -31,4 +36,28 @@ pub(crate) fn generate(account: &Account) -> Result<(PrivateKey, Vec<Certificate
     let priv_key = ::rustls::PrivateKey(priv_key);
     let cert_chain = vec![::rustls::Certificate(cert_der)];
     Ok((priv_key, cert_chain))
+}
+
+/// Dummy certificate verifier that treats any certificate as valid.
+/// FIXME: such verification is vulnerable to MITM attacks, but convenient for testing.
+pub(crate) struct ServerVerification;
+
+impl ServerVerification {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self)
+    }
+}
+
+impl ServerCertVerifier for ServerVerification {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &Certificate,
+        _intermediates: &[Certificate],
+        _server_name: &ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: SystemTime,
+    ) -> Result<ServerCertVerified, Error> {
+        Ok(ServerCertVerified::assertion())
+    }
 }

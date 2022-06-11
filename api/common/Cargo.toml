@@ -1,0 +1,13 @@
+[package]
+name = "ipiis-api-common"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ipis = { git = "https://github.com/ulagbulag-village/ipis" }
+ipiis-common = { path = "../../common" }
+
+sled = "0.34"
+tempfile = "3.3"

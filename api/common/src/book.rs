@@ -9,7 +9,7 @@ use ipis::core::{
 
 #[derive(Clone, Debug)]
 pub struct AddressBook<Address> {
-    pub(crate) account_me: Arc<Account>,
+    pub account_me: Arc<Account>,
     table: sled::Db,
     _address: PhantomData<Address>,
 }

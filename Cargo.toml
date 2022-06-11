@@ -2,7 +2,10 @@
 resolver = "2"
 members = [
     "api",
+    "api/common",
     "api/quic",
+    "api/tcp",
+    "api/wasi",
     "common",
     "modules/bench/common",
     "modules/bench/server",

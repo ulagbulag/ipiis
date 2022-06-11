@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use ipiis_api_common::impl_ipiis_server;
 use ipiis_common::Ipiis;
 use ipis::{
     async_trait::async_trait,
@@ -14,7 +15,7 @@ use ipis::{
 };
 use quinn::{Endpoint, Incoming, IncomingBiStreams, ServerConfig};
 
-use crate::common::cert;
+impl_ipiis_server!(client: crate::client::IpiisClient, server: IpiisServer,);
 
 pub struct IpiisServer {
     pub(crate) client: crate::client::IpiisClient,
@@ -70,7 +71,7 @@ impl IpiisServer {
             let client_config = ::quinn::ClientConfig::new(Arc::new(crypto));
 
             let server_config = {
-                let (priv_key, cert_chain) = cert::generate(&account_me)?;
+                let (priv_key, cert_chain) = crate::cert::generate(&account_me)?;
 
                 let mut config = ServerConfig::with_single_cert(cert_chain, priv_key)?;
                 config.transport = {
