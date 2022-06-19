@@ -1,3 +1,4 @@
+use core::time::Duration;
 use std::sync::Arc;
 
 use ipiis_api::{
@@ -112,6 +113,7 @@ async fn run_server(port: u16) -> Result<AccountRef> {
 
     // accept a single connection
     tokio::spawn(async move { server.run().await });
+    tokio::time::sleep(Duration::from_secs(1)).await;
 
     Ok(public_key)
 }

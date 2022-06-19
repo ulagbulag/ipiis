@@ -65,9 +65,7 @@ impl IpiisServer {
         let incoming = {
             let addr: SocketAddr = format!("0.0.0.0:{port}").parse()?;
 
-            let incoming = tokio::net::TcpListener::bind(addr).await?;
-
-            incoming
+            tokio::net::TcpListener::bind(addr).await?
         };
 
         Ok(Self {
