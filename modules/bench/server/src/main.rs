@@ -1,5 +1,6 @@
 use std::{net::SocketAddr, sync::Arc, time::Instant};
 
+use byte_unit::Byte;
 use clap::{Parser, Subcommand};
 use ipiis_api::{
     client::IpiisClient,
@@ -109,15 +110,15 @@ enum Commands {
 
         /// Size of benchmarking stream
         #[clap(short, long, default_value_t = 1_000_000_000)]
-        size: usize,
+        size: u128,
 
         /// Number of threads
-        #[clap(short, long, default_value_t = 20)]
+        #[clap(short, long, default_value_t = 4)]
         num_threads: u32,
     },
     Server {
         /// Address of the server
-        #[clap(short, long, default_value = "0.0.0.0")]
+        #[clap(short, long, default_value = "127.0.0.1")]
         address: String,
 
         /// Port of the server
@@ -152,10 +153,12 @@ async fn main() -> Result<()> {
                 .set_address(KIND.as_ref(), &account.account_ref(), &address)
                 .await?;
 
+            let size = Byte::from_bytes(size).get_appropriate_unit(false);
+
             // print the configuration
             info!("- Account: {}", account.to_string());
             info!("- Address: {address}");
-            info!("- Data Size: {size}B");
+            info!("- Data Size: {size}");
             info!("- Number of Threads: {num_threads}");
 
             // init data
@@ -164,7 +167,7 @@ async fn main() -> Result<()> {
             let data: Arc<Vec<u8>> = Arc::new(
                 ::rand::thread_rng()
                     .sample_iter(&range)
-                    .take(size)
+                    .take(size.get_byte().get_bytes().try_into()?)
                     .collect(),
             );
 
@@ -182,6 +185,16 @@ async fn main() -> Result<()> {
             // print the output
             info!("- Finished!");
             info!("- Elapsed Time: {duration:?}");
+            info!("- Elapsed Speed: {}bps", {
+                let mut speed = Byte::from_bytes(
+                    ((8 * num_threads as u128 * size.get_byte().get_bytes()) as f64
+                        / duration.as_secs_f64()) as u128,
+                )
+                .get_appropriate_unit(false)
+                .to_string();
+                speed.pop();
+                speed
+            });
             Ok(())
         }
         // deploy a server
