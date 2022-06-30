@@ -154,7 +154,7 @@ impl Ipiis for IpiisClient {
         if let Some(primary) = self.book.get_primary(None)? {
             if self.account_me().account_ref() == primary {
                 // external call
-                let () = external_call!(
+                external_call!(
                     client: self,
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAccountPrimary,
@@ -211,7 +211,7 @@ impl Ipiis for IpiisClient {
         if let Some(primary) = self.book.get_primary(None)? {
             if self.account_me().account_ref() == primary {
                 // external call
-                let () = external_call!(
+                external_call!(
                     client: self,
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAddress,

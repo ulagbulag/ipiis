@@ -345,11 +345,11 @@ macro_rules! define_io {
                             let mut opcode = ::ipis::stream::DynStream::Owned(super::OpCode::$case);
 
                             // pack data
-                            let () = opcode.serialize_inner().await?;
-                            let () = self.__sign.serialize_inner().await?;
+                            opcode.serialize_inner().await?;
+                            self.__sign.serialize_inner().await?;
                             $(
                                 {
-                                    let () = self.$input_field.serialize_inner().await?;
+                                    self.$input_field.serialize_inner().await?;
                                 }
                             )*
 
@@ -457,7 +457,7 @@ macro_rules! define_io {
                             };
 
                             // verify data
-                            let () = {
+                            {
                                 // select the sign data
                                 let data = res.__sign.as_ref().await?;
 
@@ -627,7 +627,7 @@ macro_rules! define_io {
                             };
 
                             // verify data
-                            let () = {
+                            {
                                 // select the sign data
                                 let data = res.__sign.as_ref().await?;
 
