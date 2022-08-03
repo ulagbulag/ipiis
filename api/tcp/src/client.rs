@@ -8,8 +8,8 @@ use ipis::{
         value::hash::Hash,
     },
     env::{infer, Infer},
-    tokio,
     resource::Resource,
+    tokio,
 };
 
 #[derive(Clone)]
@@ -224,4 +224,8 @@ impl IpiisClient {
 }
 
 #[async_trait]
-impl Resource for IpiisClient {}
+impl Resource for IpiisClient {
+    async fn release(&mut self) -> Result<()> {
+        Ok(())
+    }
+}

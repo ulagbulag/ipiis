@@ -263,4 +263,8 @@ impl IpiisClient {
 }
 
 #[async_trait]
-impl Resource for IpiisClient {}
+impl Resource for IpiisClient {
+    async fn release(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
