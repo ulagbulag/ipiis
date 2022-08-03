@@ -9,6 +9,7 @@ use ipis::{
     },
     env::{infer, Infer},
     tokio,
+    resource::Resource,
 };
 
 #[derive(Clone)]
@@ -221,3 +222,6 @@ impl IpiisClient {
         Ok(new_conn)
     }
 }
+
+#[async_trait]
+impl Resource for IpiisClient {}

@@ -10,6 +10,7 @@ use ipis::{
         value::hash::Hash,
     },
     env::{infer, Infer},
+    resource::Resource,
 };
 use quinn::{Connection, Endpoint};
 
@@ -260,3 +261,6 @@ impl IpiisClient {
         Ok(conn)
     }
 }
+
+#[async_trait]
+impl Resource for IpiisClient {}
