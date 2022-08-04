@@ -109,7 +109,7 @@ async fn run_client(server: AccountRef, port: u16) -> Result<IpiisClient> {
 async fn run_server(port: u16) -> Result<AccountRef> {
     // init a server
     let server = PingPongServer::genesis(port).await?;
-    let public_key = server.as_ref().account_me().account_ref();
+    let public_key = *server.as_ref().account_ref();
 
     // accept a single connection
     tokio::spawn(async move { server.run().await });

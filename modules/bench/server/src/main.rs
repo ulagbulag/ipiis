@@ -203,7 +203,7 @@ async fn main() -> Result<()> {
             let server = IpiisBenchServer::genesis(port).await?;
 
             // print the configuration
-            info!("- Account: {}", server.account_me().to_string());
+            info!("- Account: {}", unsafe { server.account_me() }?.to_string());
             info!("- Address: {address}:{port}");
 
             // deploy the server

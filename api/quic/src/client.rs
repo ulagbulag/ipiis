@@ -112,8 +112,12 @@ impl Ipiis for IpiisClient {
     type Reader = ::quinn::RecvStream;
     type Writer = ::quinn::SendStream;
 
-    fn account_me(&self) -> &Account {
-        &self.book.account_me
+    unsafe fn account_me(&self) -> Result<&Account> {
+        Ok(&self.book.account_me)
+    }
+
+    fn account_ref(&self) -> &AccountRef {
+        &self.book.account_ref
     }
 
     async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef> {
@@ -153,7 +157,7 @@ impl Ipiis for IpiisClient {
 
         // update server-side if you are a root
         if let Some(primary) = self.book.get_primary(None)? {
-            if self.account_me().account_ref() == primary {
+            if self.account_ref() == &primary {
                 // external call
                 external_call!(
                     client: self,
@@ -210,7 +214,7 @@ impl Ipiis for IpiisClient {
 
         // update server-side if you are a root
         if let Some(primary) = self.book.get_primary(None)? {
-            if self.account_me().account_ref() == primary {
+            if self.account_ref() == &primary {
                 // external call
                 external_call!(
                     client: self,

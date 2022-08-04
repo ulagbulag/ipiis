@@ -17,7 +17,15 @@ pub trait Ipiis {
     type Reader: AsyncRead + Send + Unpin + 'static;
     type Writer: AsyncWrite + Send + Unpin + 'static;
 
-    fn account_me(&self) -> &Account;
+    /// # Safety
+    /// The source code itself is completely safe.
+    /// However, if two or more keys exist at the same time by calling this function,
+    /// some fatal security flaw such as key leakage may occur.
+    /// So please be careful when using it.
+    ///
+    unsafe fn account_me(&self) -> Result<&Account>;
+
+    fn account_ref(&self) -> &AccountRef;
 
     async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef>;
 
@@ -41,7 +49,7 @@ pub trait Ipiis {
         T: Archive + Serialize<SignatureSerializer> + Send,
         <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
     {
-        Metadata::builder().build(self.account_me(), target, msg)
+        Metadata::builder().build(unsafe { self.account_me() }?, target, msg)
     }
 
     fn sign_as_guarantor<T>(&self, msg: GuaranteeSigned<T>) -> Result<GuarantorSigned<T>>
@@ -49,7 +57,7 @@ pub trait Ipiis {
         T: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
         <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
     {
-        Signer::sign(self.account_me(), msg)
+        Signer::sign(unsafe { self.account_me() }?, msg)
     }
 
     async fn call_raw(
@@ -70,8 +78,12 @@ where
     type Reader = <IpiisClient as Ipiis>::Reader;
     type Writer = <IpiisClient as Ipiis>::Writer;
 
-    fn account_me(&self) -> &Account {
+    unsafe fn account_me(&self) -> Result<&Account> {
         (**self).account_me()
+    }
+
+    fn account_ref(&self) -> &AccountRef {
+        (**self).account_ref()
     }
 
     async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef> {
@@ -462,7 +474,7 @@ macro_rules! define_io {
                                 let data = res.__sign.as_ref().await?;
 
                                 // verify it
-                                data.verify(Some(client.account_me().account_ref()))?
+                                data.verify(Some(*client.account_ref()))?
                             };
 
                             Ok(res)

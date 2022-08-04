@@ -10,6 +10,7 @@ use ipis::core::{
 #[derive(Clone, Debug)]
 pub struct AddressBook<Address> {
     pub account_me: Arc<Account>,
+    pub account_ref: Arc<AccountRef>,
     table: sled::Db,
     _address: PhantomData<Address>,
 }
@@ -20,6 +21,7 @@ impl<Address> AddressBook<Address> {
         P: AsRef<::std::path::Path>,
     {
         Ok(Self {
+            account_ref: account_me.account_ref().into(),
             account_me: account_me.into(),
             // TODO: allow to store in specific directory
             table: sled::open(::tempfile::tempdir()?.path().join(book_path))?,

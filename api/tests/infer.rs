@@ -13,5 +13,8 @@ async fn test_client() {
     let client = IpiisClient::infer().await;
 
     // compare the accounts
-    assert_eq!(account.to_string(), client.account_me().to_string());
+    assert_eq!(
+        account.account_ref().to_string(),
+        client.account_ref().to_string(),
+    );
 }
