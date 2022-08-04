@@ -11,6 +11,7 @@ use ipis::{
     core::{
         account::{AccountRef, GuaranteeSigned, GuarantorSigned},
         anyhow::{bail, Result},
+        data::Data,
     },
     env::Infer,
     tokio::{self, io::AsyncRead},
@@ -34,7 +35,7 @@ async fn main() -> Result<()> {
                 client: &client,
                 target: None => &server,
                 request: crate::io => Ok,
-                sign: client.sign(server, CLIENT_DUMMY)?,
+                sign: client.sign_owned(server, CLIENT_DUMMY)?,
                 inputs: {
                     name: "Alice".to_string(),
                     age: 42,
@@ -54,7 +55,7 @@ async fn main() -> Result<()> {
                     client: &client,
                     target: None => &server,
                     request: crate::io => Err,
-                    sign: client.sign(server, CLIENT_DUMMY)?,
+                    sign: client.sign_owned(server, CLIENT_DUMMY)?,
                     inputs: {
                         name: "Alice".to_string(),
                         age: 42,
@@ -82,7 +83,7 @@ async fn main() -> Result<()> {
                 client: &client,
                 target: None => &server,
                 request: crate::io => Raw,
-                sign: client.sign(server, CLIENT_DUMMY)?,
+                sign: client.sign_owned(server, CLIENT_DUMMY)?,
                 inputs: {
                     name: "Alice".to_string(),
                     age: 42,
@@ -236,11 +237,11 @@ define_io! {
             name: String,
             age: u32,
         },
-        input_sign: GuaranteeSigned<u8>,
+        input_sign: Data<GuaranteeSigned, u8>,
         outputs: {
             msg: String,
         },
-        output_sign: GuarantorSigned<u8>,
+        output_sign: Data<GuarantorSigned, u8>,
         generics: { },
     },
     Err {
@@ -248,11 +249,11 @@ define_io! {
             name: String,
             age: u32,
         },
-        input_sign: GuaranteeSigned<u8>,
+        input_sign: Data<GuaranteeSigned, u8>,
         outputs: {
             msg: String,
         },
-        output_sign: GuarantorSigned<u8>,
+        output_sign: Data<GuarantorSigned, u8>,
         generics: { },
     },
     Raw {
@@ -260,11 +261,11 @@ define_io! {
             name: String,
             age: u32,
         },
-        input_sign: GuaranteeSigned<u8>,
+        input_sign: Data<GuaranteeSigned, u8>,
         outputs: {
             msg: String,
         },
-        output_sign: GuarantorSigned<u8>,
+        output_sign: Data<GuarantorSigned, u8>,
         generics: { },
     },
 }

@@ -27,4 +27,4 @@ ipiis-common = { path = "../common" }
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
 
 bytecheck = "0.6"
-rkyv = { version = "0.7", features = ["archive_be"] }
+rkyv = { version = "0.7", features = ["archive_le"] }

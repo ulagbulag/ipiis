@@ -1,10 +1,11 @@
 use ipis::{
     async_trait::async_trait,
     core::{
-        account::{Account, AccountRef, GuaranteeSigned, GuarantorSigned, Signer},
+        account::{Account, AccountRef, GuaranteeSigned, GuarantorSigned},
         anyhow::Result,
-        metadata::Metadata,
+        data::Data,
         signature::SignatureSerializer,
+        signed::IsSigned,
         value::hash::Hash,
     },
     tokio::io::{AsyncRead, AsyncWrite},
@@ -13,7 +14,7 @@ use rkyv::{Archive, Serialize};
 
 #[async_trait]
 pub trait Ipiis {
-    type Address: Send + Sync;
+    type Address: IsSigned + Send + Sync;
     type Reader: AsyncRead + Send + Unpin + 'static;
     type Writer: AsyncWrite + Send + Unpin + 'static;
 
@@ -44,20 +45,30 @@ pub trait Ipiis {
         address: &<Self as Ipiis>::Address,
     ) -> Result<()>;
 
-    fn sign<T>(&self, target: AccountRef, msg: T) -> Result<GuaranteeSigned<T>>
+    fn sign<'a, T>(&self, target: AccountRef, msg: &'a T) -> Result<Data<GuaranteeSigned, &'a T>>
     where
-        T: Archive + Serialize<SignatureSerializer> + Send,
+        T: Archive + Serialize<SignatureSerializer> + IsSigned,
         <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
     {
-        Metadata::builder().build(unsafe { self.account_me() }?, target, msg)
+        Data::builder().build(unsafe { self.account_me() }?, target, msg)
     }
 
-    fn sign_as_guarantor<T>(&self, msg: GuaranteeSigned<T>) -> Result<GuarantorSigned<T>>
+    fn sign_owned<T>(&self, target: AccountRef, msg: T) -> Result<Data<GuaranteeSigned, T>>
     where
-        T: Archive + Serialize<SignatureSerializer> + ::core::fmt::Debug + PartialEq + Send,
+        T: Archive + Serialize<SignatureSerializer> + IsSigned,
         <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
     {
-        Signer::sign(unsafe { self.account_me() }?, msg)
+        Data::builder().build_owned(unsafe { self.account_me() }?, target, msg)
+    }
+
+    fn sign_as_guarantor<T>(
+        &self,
+        msg: Data<GuaranteeSigned, T>,
+    ) -> Result<Data<GuarantorSigned, T>>
+    where
+        T: IsSigned,
+    {
+        msg.sign(unsafe { self.account_me() }?)
     }
 
     async fn call_raw(
@@ -111,12 +122,30 @@ where
         (**self).set_address(kind, target, address).await
     }
 
-    fn sign<T>(&self, target: AccountRef, msg: T) -> Result<GuaranteeSigned<T>>
+    fn sign<'a, T>(&self, target: AccountRef, msg: &'a T) -> Result<Data<GuaranteeSigned, &'a T>>
     where
-        T: Archive + Serialize<SignatureSerializer> + Send,
+        T: Archive + Serialize<SignatureSerializer> + IsSigned,
         <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
     {
         (**self).sign(target, msg)
+    }
+
+    fn sign_owned<T>(&self, target: AccountRef, msg: T) -> Result<Data<GuaranteeSigned, T>>
+    where
+        T: Archive + Serialize<SignatureSerializer> + IsSigned,
+        <T as Archive>::Archived: ::core::fmt::Debug + PartialEq,
+    {
+        (**self).sign_owned(target, msg)
+    }
+
+    fn sign_as_guarantor<T>(
+        &self,
+        msg: Data<GuaranteeSigned, T>,
+    ) -> Result<Data<GuarantorSigned, T>>
+    where
+        T: IsSigned,
+    {
+        (**self).sign_as_guarantor(msg)
     }
 
     async fn call_raw(
@@ -144,35 +173,35 @@ pub const CLIENT_DUMMY: u8 = 42;
 define_io! {
     GetAccountPrimary {
         inputs: { },
-        input_sign: GuaranteeSigned<Option<Hash>>,
+        input_sign: Data<GuaranteeSigned, Option<Hash>>,
         outputs: {
             account: AccountRef,
             address: Option<Address>,
         },
-        output_sign: GuarantorSigned<Option<Hash>>,
+        output_sign: Data<GuarantorSigned, Option<Hash>>,
         generics: { Address, },
     },
     SetAccountPrimary {
         inputs: { },
-        input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
+        input_sign: Data<GuaranteeSigned, (Option<Hash>, AccountRef)>,
         outputs: { },
-        output_sign: GuarantorSigned<(Option<Hash>, AccountRef)>,
+        output_sign: Data<GuarantorSigned, (Option<Hash>, AccountRef)>,
         generics: { },
     },
     GetAddress {
         inputs: { },
-        input_sign: GuaranteeSigned<(Option<Hash>, AccountRef)>,
+        input_sign: Data<GuaranteeSigned, (Option<Hash>, AccountRef)>,
         outputs: {
             address: Address,
         },
-        output_sign: GuarantorSigned<(Option<Hash>, AccountRef)>,
+        output_sign: Data<GuarantorSigned, (Option<Hash>, AccountRef)>,
         generics: { Address, },
     },
     SetAddress {
         inputs: { },
-        input_sign: GuaranteeSigned<(Option<Hash>, AccountRef, Address)>,
+        input_sign: Data<GuaranteeSigned, (Option<Hash>, AccountRef, Address)>,
         outputs: { },
-        output_sign: GuarantorSigned<(Option<Hash>, AccountRef, Address)>,
+        output_sign: Data<GuarantorSigned, (Option<Hash>, AccountRef, Address)>,
         generics: { Address, },
     },
 }
@@ -208,7 +237,7 @@ macro_rules! define_io {
                     pub struct $case<'__io, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -222,7 +251,7 @@ macro_rules! define_io {
                     impl<'__io, $( $generic, )* > ::ipis::core::signed::IsSigned for $case<'__io, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -231,7 +260,7 @@ macro_rules! define_io {
                     impl<'__io, $( $generic, )* > $case<'__io, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -243,8 +272,8 @@ macro_rules! define_io {
                         ) -> ::ipis::core::anyhow::Result<super::response::$case<'static, $( $generic, )* >>
                         where
                             __IpiisClient: super::super::Ipiis,
-                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
-                                    ::ipis::core::account::GuaranteeSigned<String>,
+                            <::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String>,
                                     ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
                                 >,
                             $(
@@ -310,8 +339,8 @@ macro_rules! define_io {
                         ) -> ::ipis::core::anyhow::Result<<__IpiisClient as super::super::Ipiis>::Reader>
                         where
                             __IpiisClient: super::super::Ipiis,
-                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
-                                    ::ipis::core::account::GuaranteeSigned<String>,
+                            <::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String>,
                                     ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
                                 >,
                             $(
@@ -412,7 +441,7 @@ macro_rules! define_io {
                     impl<$( $generic, )* > $case<'static, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -422,8 +451,8 @@ macro_rules! define_io {
                         ) -> ::ipis::core::anyhow::Result<Self>
                         where
                             __IpiisClient: super::super::Ipiis,
-                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
-                                    ::ipis::core::account::GuaranteeSigned<String>,
+                            <::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String>,
                                     ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
                                 >,
                             $(
@@ -474,7 +503,7 @@ macro_rules! define_io {
                                 let data = res.__sign.as_ref().await?;
 
                                 // verify it
-                                data.verify(Some(*client.account_ref()))?
+                                data.verify(Some(client.account_ref()))?
                             };
 
                             Ok(res)
@@ -490,7 +519,7 @@ macro_rules! define_io {
                     pub struct $case<'__io, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -504,7 +533,7 @@ macro_rules! define_io {
                     impl<'__io, $( $generic, )* > ::ipis::core::signed::IsSigned for $case<'__io, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -513,7 +542,7 @@ macro_rules! define_io {
                     impl<'__io, $( $generic, )* > $case<'__io, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -524,8 +553,8 @@ macro_rules! define_io {
                         ) -> ::ipis::core::anyhow::Result<()>
                         where
                             __IpiisClient: super::super::Ipiis,
-                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
-                                    ::ipis::core::account::GuaranteeSigned<String>,
+                            <::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String>,
                                     ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
                                 >,
                             $(
@@ -583,7 +612,7 @@ macro_rules! define_io {
                     impl<$( $generic, )* > $case<'static, $( $generic, )* >
                     where
                         $(
-                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq,
+                            $generic: ::rkyv::Archive + Clone + ::core::fmt::Debug + PartialEq + ::ipis::core::signed::IsSigned,
                             <$generic as ::rkyv::Archive>::Archived: ::core::fmt::Debug + PartialEq,
                         )*
                     {
@@ -592,8 +621,8 @@ macro_rules! define_io {
                             mut recv: impl ::ipis::tokio::io::AsyncRead + Unpin,
                         ) -> ::ipis::core::anyhow::Result<Self>
                         where
-                            <::ipis::core::account::GuaranteeSigned<String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
-                                    ::ipis::core::account::GuaranteeSigned<String>,
+                            <::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String> as ::ipis::rkyv::Archive>::Archived: ::ipis::rkyv::Deserialize<
+                                    ::ipis::core::data::Data<::ipis::core::account::GuaranteeSigned, String>,
                                     ::ipis::rkyv::de::deserializers::SharedDeserializeMap,
                                 >,
                             $(
@@ -644,7 +673,7 @@ macro_rules! define_io {
                                 let data = res.__sign.as_ref().await?;
 
                                 // verify it
-                                data.verify(Some(*target))?
+                                data.verify(Some(target))?
                             };
 
                             Ok(res)
@@ -829,7 +858,7 @@ macro_rules! external_call {
             if data.is_signed_dyn() {
                 ::ipis::stream::DynStream::Owned(data)
             } else {
-                ::ipis::stream::DynStream::OwnedAlignedVec($client.sign(*$target, data)?.to_bytes()?)
+                ::ipis::stream::DynStream::OwnedAlignedVec($client.sign_owned(*$target, data)?.to_bytes()?)
             }
         };
 

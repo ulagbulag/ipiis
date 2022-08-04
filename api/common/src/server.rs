@@ -61,7 +61,7 @@ macro_rules! impl_ipiis_server {
                     let sign_as_guarantee = req.__sign.into_owned().await?;
 
                     // unpack data
-                    let kind = sign_as_guarantee.data.data;
+                    let kind = &sign_as_guarantee.data;
 
                     // handle data
                     let account = client.get_account_primary(kind.as_ref()).await?;
@@ -87,11 +87,11 @@ macro_rules! impl_ipiis_server {
                     let sign_as_guarantee = req.__sign.into_owned().await?;
 
                     // verify as root
-                    sign_as_guarantee.ensure_self_signed()?;
+                    sign_as_guarantee.metadata.ensure_self_signed()?;
 
                     // unpack data
-                    let kind = sign_as_guarantee.data.data.0;
-                    let account = sign_as_guarantee.data.data.1;
+                    let kind = sign_as_guarantee.data.0;
+                    let account = sign_as_guarantee.data.1;
 
                     // handle data
                     client.set_account_primary(kind.as_ref(), &account).await?;
@@ -119,8 +119,8 @@ macro_rules! impl_ipiis_server {
                     let sign_as_guarantee = req.__sign.into_owned().await?;
 
                     // unpack data
-                    let kind = sign_as_guarantee.data.data.0;
-                    let account = sign_as_guarantee.data.data.1;
+                    let kind = sign_as_guarantee.data.0;
+                    let account = sign_as_guarantee.data.1;
 
                     // handle data
                     let address = client.get_address(kind.as_ref(), &account).await?;
@@ -149,12 +149,12 @@ macro_rules! impl_ipiis_server {
                     let sign_as_guarantee = req.__sign.into_owned().await?;
 
                     // verify as root
-                    sign_as_guarantee.ensure_self_signed()?;
+                    sign_as_guarantee.metadata.ensure_self_signed()?;
 
                     // unpack data
-                    let kind = sign_as_guarantee.data.data.0;
-                    let account = sign_as_guarantee.data.data.1;
-                    let address = sign_as_guarantee.data.data.2;
+                    let kind = sign_as_guarantee.data.0;
+                    let account = sign_as_guarantee.data.1;
+                    let address = sign_as_guarantee.data.2;
 
                     // handle data
                     client
