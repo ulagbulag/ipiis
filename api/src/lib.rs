@@ -8,4 +8,6 @@ pub use ipiis_api_quic::*;
 pub use ipiis_api_tcp::*;
 
 #[cfg(target_os = "wasi")]
-pub use ipiis_api_wasi::*;
+pub mod client {
+    pub use ipiis_api_wasi::IpiisClient;
+}
