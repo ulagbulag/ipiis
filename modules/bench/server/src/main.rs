@@ -118,6 +118,10 @@ enum Commands {
         num_threads: u32,
     },
     Server {
+        /// Account of the source server
+        #[clap(long)]
+        account: Option<Account>,
+
         /// Address of the server
         #[clap(short, long, default_value = "127.0.0.1")]
         address: String,
@@ -199,9 +203,20 @@ async fn main() -> Result<()> {
             Ok(())
         }
         // deploy a server
-        Commands::Server { address, port } => {
+        Commands::Server {
+            account,
+            address,
+            port,
+        } => {
             // create a server
-            let server = IpiisBenchServer::genesis(port).await?;
+            let server = match account {
+                Some(account) => {
+                    ::std::env::set_var("ipis_account_me", account.to_string());
+                    ::std::env::set_var("ipiis_server_port", port.to_string());
+                    IpiisBenchServer::try_infer().await?
+                }
+                None => IpiisBenchServer::genesis(port).await?,
+            };
 
             // print the configuration
             info!("- Account: {}", unsafe { server.account_me() }?.to_string());
