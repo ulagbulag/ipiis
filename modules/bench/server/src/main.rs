@@ -1,4 +1,8 @@
-use std::{net::SocketAddr, sync::Arc, time::Instant};
+use std::{
+    net::SocketAddr,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use byte_unit::Byte;
 use clap::{Parser, Subcommand};
@@ -116,6 +120,10 @@ enum Commands {
         /// Number of threads
         #[clap(short, long, default_value_t = 4)]
         num_threads: u32,
+
+        /// Number of iteration
+        #[clap(short, long, default_value_t = 30)]
+        iter: u32,
     },
     Server {
         /// Account of the source server
@@ -146,6 +154,7 @@ async fn main() -> Result<()> {
             address,
             size,
             num_threads,
+            iter,
         } => {
             // create a client
             let client = IpiisClient::genesis(None).await?;
@@ -165,6 +174,7 @@ async fn main() -> Result<()> {
             info!("- Address: {address}");
             info!("- Data Size: {size}");
             info!("- Number of Threads: {num_threads}");
+            info!("- Number of Iteration: {iter}");
 
             // init data
             info!("- Initializing...");
@@ -178,14 +188,16 @@ async fn main() -> Result<()> {
 
             // begin benchmaring
             info!("- Benchmarking...");
-            let instant = Instant::now();
-            {
+            let mut duration = Duration::default();
+            for _ in 0..iter {
+                let instant = Instant::now();
                 futures::future::try_join_all(
                     (0..num_threads).map(|_| client.ping(DynStream::ArcVec(data.clone()))),
                 )
                 .await?;
+                duration += instant.elapsed();
             }
-            let duration = instant.elapsed();
+            duration /= iter;
 
             // print the output
             info!("- Finished!");
