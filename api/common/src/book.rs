@@ -82,11 +82,11 @@ impl<Address> AddressBook<Address> {
         #[allow(clippy::identity_op)]
         let flag = ((kind.is_some() as u8) << 1) + ((account.is_some() as u8) << 0);
 
-        let kind = kind.map(|e| &***e).unwrap_or_else(|| &[]);
+        let kind: Vec<u8> = kind.cloned().map(Into::into).unwrap_or_default();
         let account = account
             .map(|e| e.as_bytes().as_ref())
             .unwrap_or_else(|| &[]);
 
-        [&[flag], kind, account].concat()
+        [&[flag], kind.as_slice(), account].concat()
     }
 }
