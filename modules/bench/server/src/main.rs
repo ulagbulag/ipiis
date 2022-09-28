@@ -114,8 +114,8 @@ enum Commands {
         address: SocketAddr,
 
         /// Size of benchmarking stream
-        #[clap(short, long, default_value_t = 1_000_000_000)]
-        size: u128,
+        #[clap(short, long, default_value_t = Byte::from_bytes(1_000_000_000))]
+        size: Byte,
 
         /// Number of threads
         #[clap(short, long, default_value_t = 4)]
@@ -167,7 +167,7 @@ async fn main() -> Result<()> {
                 .set_address(KIND.as_ref(), &account.account_ref(), &address)
                 .await?;
 
-            let size = Byte::from_bytes(size).get_appropriate_unit(false);
+            let size = size.get_appropriate_unit(false);
 
             // print the configuration
             info!("- Account: {}", account.to_string());
