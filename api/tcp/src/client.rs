@@ -194,6 +194,10 @@ impl Ipiis for IpiisClient {
         Ok(())
     }
 
+    fn protocol(&self) -> String {
+        "tcp".to_string()
+    }
+
     async fn call_raw(
         &self,
         kind: Option<&Hash>,

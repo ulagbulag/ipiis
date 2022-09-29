@@ -228,6 +228,10 @@ impl Ipiis for IpiisClient {
         Ok(())
     }
 
+    fn protocol(&self) -> String {
+        "quic".to_string()
+    }
+
     async fn call_raw(
         &self,
         kind: Option<&Hash>,

@@ -11,12 +11,3 @@ pub use ipiis_api_tcp::*;
 pub mod client {
     pub use ipiis_api_wasi::IpiisClient;
 }
-
-#[cfg(not(target_os = "wasi"))]
-#[cfg(feature = "quic")]
-pub const PROTOCOL: &str = "quic";
-#[cfg(not(target_os = "wasi"))]
-#[cfg(feature = "tcp")]
-pub const PROTOCOL: &str = "tcp";
-#[cfg(target_os = "wasi")]
-pub const PROTOCOL: &str = "wasi";
