@@ -32,15 +32,15 @@ async fn deploy(port: u16, parent: Option<(AccountRef, u16)>) -> Result<Arc<Ipii
 #[tokio::main]
 async fn main() -> Result<()> {
     // deploy a centralized server
-    let center_1 = deploy(5001, None).await?;
+    let center_1 = deploy(9801, None).await?;
     let center_1_account = *center_1.account_ref();
 
     // deploy a edge
-    let edge_1 = deploy(5002, Some((center_1_account, 5001))).await?;
+    let edge_1 = deploy(9802, Some((center_1_account, 9801))).await?;
     let edge_1_account = *edge_1.account_ref();
 
     // deploy a end
-    let end_1 = deploy(5003, Some((edge_1_account, 5002))).await?;
+    let end_1 = deploy(9803, Some((edge_1_account, 9802))).await?;
 
     // get the center's account from `end_1`
     // route: `end_1` --> `edge_1` --> `center_1`
@@ -49,7 +49,7 @@ async fn main() -> Result<()> {
             .get_address(None, &center_1_account)
             .await?
             .to_string(),
-        "127.0.0.1:5001",
+        "127.0.0.1:9801",
     );
 
     // let's put a dummy primary account in the `center_1`.
