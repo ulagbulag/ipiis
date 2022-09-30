@@ -194,8 +194,8 @@ impl Ipiis for IpiisClient {
         Ok(())
     }
 
-    fn protocol(&self) -> String {
-        "tcp".to_string()
+    fn protocol(&self) -> Result<String> {
+        Ok("tcp".to_string())
     }
 
     async fn call_raw(

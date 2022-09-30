@@ -71,7 +71,7 @@ pub trait Ipiis {
         msg.sign(unsafe { self.account_me() }?)
     }
 
-    fn protocol(&self) -> String;
+    fn protocol(&self) -> Result<String>;
 
     async fn call_raw(
         &self,
@@ -150,7 +150,7 @@ where
         (**self).sign_as_guarantor(msg)
     }
 
-    fn protocol(&self) -> String {
+    fn protocol(&self) -> Result<String> {
         (**self).protocol()
     }
 
