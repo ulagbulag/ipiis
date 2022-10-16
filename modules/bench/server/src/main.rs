@@ -110,7 +110,7 @@ enum Commands {
         account: Account,
 
         /// Address of the target server
-        #[clap(long, default_value = "127.0.0.1:9999")]
+        #[clap(long, default_value = "127.0.0.1:9801")]
         address: SocketAddr,
 
         /// Size of benchmarking stream
@@ -135,7 +135,7 @@ enum Commands {
         address: String,
 
         /// Port of the server
-        #[clap(short, long, default_value_t = 9999)]
+        #[clap(short, long, default_value_t = 9801)]
         port: u16,
     },
 }
