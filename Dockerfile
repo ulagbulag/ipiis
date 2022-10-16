@@ -14,7 +14,6 @@ ENV ipiis_server_port="9801"
 EXPOSE 9801/tcp
 EXPOSE 9801/udp
 WORKDIR /usr/local/bin
-ENTRYPOINT [ "/bin/sh" ]
 CMD [ "runtime" ]
 
 # Install dependencies
