@@ -65,7 +65,7 @@ jobs:
             ./Dockerfile
           build-args: |
             ALPINE_VERSION=${{ env.ALPINE_VERSION }}
-            API_FEATURES="quic"
+            API_FEATURES=quic
 
       - name: Push To ${{ env.REGISTRY }}
         id: push-to-quay
@@ -110,7 +110,7 @@ jobs:
             ./Dockerfile
           build-args: |
             ALPINE_VERSION=${{ env.ALPINE_VERSION }}
-            API_FEATURES="tcp"
+            API_FEATURES=tcp
 
       - name: Push To ${{ env.REGISTRY }}
         id: push-to-quay
