@@ -1,12 +1,12 @@
 [package]
-name = "ipiis-modules-bench-common"
+name = "ipiis-modules-bench-client"
 version = "0.1.0"
 edition = "2021"
 
 authors = ["Ho Kim <ho.kim@ulagbulag.io>"]
 description = "InterPlanetary Interface Interconnection Service"
 documentation = "https://docs.rs/ipiis"
-license = "MIT OR Apache-2.0"
+license = "GPL-3.0-or-later WITH Classpath-exception-2.0"
 readme = "../../../README.md"
 homepage = "https://ulagbulag.io/"
 repository = "https://github.com/ulagbulag-village/ipiis"
@@ -15,10 +15,10 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 
 [dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
+ipiis-api-quic = { path = "../../../api/quic" }
+ipiis-api-tcp = { path = "../../../api/tcp" }
 ipiis-common = { path = "../../../common" }
+ipiis-modules-bench-common = { path = "../common" }
 
-byte-unit = { version = "4.0", features = ["serde"] }
-bytecheck = "0.6"
-clap = { version = "3.1", features = ["derive", "env", "unicode", "wrap_help"] }
-rkyv = { version = "0.7", features = ["archive_le"] }
-serde = { version = "1.0", features = ["derive"] }
+rand = "0.8"
+serde_json = "1.0"

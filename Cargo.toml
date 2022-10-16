@@ -6,6 +6,7 @@ members = [
     "api/quic",
     "api/tcp",
     "common",
+    "modules/bench/client",
     "modules/bench/common",
     "modules/bench/server",
     "pallet",

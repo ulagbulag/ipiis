@@ -6,7 +6,7 @@ ARG PACKAGE="ipiis"
 FROM docker.io/alpine:${ALPINE_VERSION} as server
 
 # Configure default environment variables
-ENV ipiis_client_account_primary_address="127.0.0.1:9801"
+ENV ipiis_account_primary_address="127.0.0.1:9801"
 ENV ipiis_server_port="9801"
 
 # Server Configuration

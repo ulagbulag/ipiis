@@ -15,9 +15,9 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 
 [dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
-ipiis-api = { path = "../../../api" }
+ipiis-api-quic = { path = "../../../api/quic" }
+ipiis-api-tcp = { path = "../../../api/tcp" }
+ipiis-common = { path = "../../../common" }
 ipiis-modules-bench-common = { path = "../common" }
 
-byte-unit = "4.0"
-clap = { version = "3.1", features = ["derive", "unicode", "wrap_help"] }
 rand = "0.8"
