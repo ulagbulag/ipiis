@@ -1,5 +1,6 @@
 # Configure environment variables
 ARG ALPINE_VERSION="latest"
+ARG API_FEATURES=""
 ARG PACKAGE="ipiis"
 
 # Be ready for serving
@@ -13,7 +14,8 @@ ENV ipiis_server_port="9801"
 EXPOSE 9801/tcp
 EXPOSE 9801/udp
 WORKDIR /usr/local/bin
-CMD [ "/bin/sh" ]
+ENTRYPOINT [ "/bin/sh" ]
+CMD [ "runtime" ]
 
 # Install dependencies
 RUN apk add --no-cache libgcc
@@ -28,11 +30,19 @@ RUN apk add --no-cache musl-dev
 ADD . /src
 WORKDIR /src
 
+# Load environment variables
+ARG API_FEATURES
+ARG PACKAGE
+
 # Build it!
 RUN mkdir /out \
-    && cargo build --all --workspace --release \
+    # disable default API features
+    && sed -i 's/^\(default = \)\[.*\]/\1\[\]/g' ./api/Cargo.toml \
+    # build packages
+    && cargo build --all --workspace --release --features "$API_FEATURES" \
     && find ./target/release/ -maxdepth 1 -type f -perm +a=x -print0 | xargs -0 -I {} mv {} /out \
     && mv ./LICENSE-* / \
+    && mv /out/${PACKAGE}-runtime /out/runtime \
     && rm -rf /src
 
 # Copy executable files
