@@ -88,7 +88,7 @@ async fn main() -> Result<()> {
     if let Some(mut save_dir) = args.inputs.save_dir.clone() {
         let protocol = protocol.to_string().await?;
         let timestamp = timestamp.to_rfc3339();
-        let filename = format!("ipwis-{protocol}-{timestamp}.json");
+        let filename = format!("benchmark-ipiis-{protocol}-{timestamp}.json");
         let filepath = {
             save_dir.push(filename);
             save_dir
