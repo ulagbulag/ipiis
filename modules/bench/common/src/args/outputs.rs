@@ -22,6 +22,9 @@ pub struct ArgsIpiisPublic {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ResultsOutputsMetric {
+    /// Protocol of queried benchmarking stream
+    pub protocol: String,
+
     /// Elapsed time as seconds
     pub elapsed_time_s: f64,
 
