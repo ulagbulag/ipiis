@@ -2,13 +2,14 @@ use std::net::SocketAddr;
 
 use serde::{Deserialize, Serialize};
 
-use super::inputs::ArgsClientInputs;
+use super::inputs::{ArgsClientInputs, ArgsSimulation};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Results {
     pub ipiis: ArgsIpiisPublic,
     pub inputs: ArgsClientInputs,
     pub outputs: ResultsOutputsMetric,
+    pub simulation: ArgsSimulation,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

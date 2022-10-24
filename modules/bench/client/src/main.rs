@@ -104,6 +104,7 @@ async fn main() -> Result<()> {
             },
             inputs: args.inputs,
             outputs: outputs.clone(),
+            simulation,
         };
         let file = ::std::fs::File::create(filepath)?;
         ::serde_json::to_writer(file, &results)?;
