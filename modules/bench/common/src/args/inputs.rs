@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, path::PathBuf};
+use std::path::PathBuf;
 
 use byte_unit::Byte;
 use clap::{Parser, ValueEnum};
@@ -34,7 +34,7 @@ pub struct ArgsIpiis {
 
     /// Address of the target server
     #[clap(long, env = "ipiis_client_account_primary_address")]
-    pub address: SocketAddr,
+    pub address: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Parser)]

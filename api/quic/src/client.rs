@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{net::ToSocketAddrs, sync::Arc, time::Duration};
 
 use ipiis_api_common::book::AddressBook;
 use ipiis_common::{external_call, Ipiis};
@@ -108,7 +108,7 @@ impl IpiisClient {
 
 #[async_trait]
 impl Ipiis for IpiisClient {
-    type Address = ::std::net::SocketAddr;
+    type Address = String;
     type Reader = ::quinn::RecvStream;
     type Writer = ::quinn::SendStream;
 
@@ -220,7 +220,7 @@ impl Ipiis for IpiisClient {
                     client: self,
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAddress,
-                    sign: self.sign_owned(primary, (kind.copied(), *target, *address))?,
+                    sign: self.sign_owned(primary, (kind.copied(), *target, address.clone()))?,
                     inputs: { },
                 );
             }
@@ -258,7 +258,12 @@ impl IpiisClient {
 
         let new_conn = self
             .endpoint
-            .connect(addr, &server_name)?
+            .connect(
+                addr.to_socket_addrs()?
+                    .next()
+                    .ok_or_else(|| anyhow!("failed to parse the socket address: {addr}"))?,
+                &server_name,
+            )?
             .await
             .map_err(|e| anyhow!("failed to connect: {e}"))?;
 

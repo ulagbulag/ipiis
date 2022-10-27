@@ -1,3 +1,5 @@
+use std::net::ToSocketAddrs;
+
 use ipiis_api_common::book::AddressBook;
 use ipiis_common::{external_call, Ipiis};
 use ipis::{
@@ -74,7 +76,7 @@ impl IpiisClient {
 
 #[async_trait]
 impl Ipiis for IpiisClient {
-    type Address = ::std::net::SocketAddr;
+    type Address = String;
     type Reader = tokio::io::ReadHalf<tokio::net::TcpStream>;
     type Writer = tokio::io::WriteHalf<tokio::net::TcpStream>;
 
@@ -186,7 +188,7 @@ impl Ipiis for IpiisClient {
                     client: self,
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAddress,
-                    sign: self.sign_owned(primary, (kind.copied(), *target, *address))?,
+                    sign: self.sign_owned(primary, (kind.copied(), *target, address.clone()))?,
                     inputs: { },
                 );
             }
@@ -223,7 +225,11 @@ impl IpiisClient {
         let addr = self.get_address(kind, target).await?;
 
         let new_conn = tokio::net::TcpSocket::new_v4()?
-            .connect(addr)
+            .connect(
+                addr.to_socket_addrs()?
+                    .next()
+                    .ok_or_else(|| anyhow!("failed to parse the socket address: {addr}"))?,
+            )
             .await
             .map_err(|e| anyhow!("failed to connect: {e}"))?;
 

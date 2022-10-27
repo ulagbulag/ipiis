@@ -1,5 +1,3 @@
-use std::net::SocketAddr;
-
 use serde::{Deserialize, Serialize};
 
 use super::inputs::{ArgsClientInputs, ArgsSimulation};
@@ -18,7 +16,7 @@ pub struct ArgsIpiisPublic {
     pub account: String,
 
     /// Address of the target server
-    pub address: SocketAddr,
+    pub address: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

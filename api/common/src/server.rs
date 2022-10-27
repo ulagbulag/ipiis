@@ -154,12 +154,10 @@ macro_rules! impl_ipiis_server {
                     // unpack data
                     let kind = sign_as_guarantee.data.0;
                     let account = sign_as_guarantee.data.1;
-                    let address = sign_as_guarantee.data.2;
+                    let address = &sign_as_guarantee.data.2;
 
                     // handle data
-                    client
-                        .set_address(kind.as_ref(), &account, &address)
-                        .await?;
+                    client.set_address(kind.as_ref(), &account, address).await?;
 
                     // sign data
                     let sign = client.sign_as_guarantor(sign_as_guarantee)?;

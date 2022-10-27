@@ -1,9 +1,9 @@
 use core::{marker::PhantomData, str::FromStr};
-use std::sync::Arc;
+use std::{net::ToSocketAddrs, sync::Arc};
 
 use ipis::core::{
     account::{Account, AccountRef},
-    anyhow::{bail, Result},
+    anyhow::{anyhow, bail, Result},
     value::hash::Hash,
 };
 
@@ -31,7 +31,7 @@ impl<Address> AddressBook<Address> {
 
     pub fn get(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<Option<Address>>
     where
-        Address: FromStr,
+        Address: FromStr + ToSocketAddrs,
         <Address as FromStr>::Err: ::std::error::Error + Send + Sync + 'static,
     {
         let key = self.to_key_canonical(kind, Some(target));
@@ -59,8 +59,18 @@ impl<Address> AddressBook<Address> {
 
     pub fn set(&self, kind: Option<&Hash>, target: &AccountRef, address: &Address) -> Result<()>
     where
-        Address: ToString,
+        Address: ::std::fmt::Debug + ToSocketAddrs + ToString,
     {
+        // verify address
+        if address
+            .to_socket_addrs()
+            .map_err(|e| anyhow!("failed to parse the socket address: {address:?}: {e}"))?
+            .count()
+            != 1
+        {
+            bail!("failed to parse the socket address: {address:?}");
+        }
+
         let key = self.to_key_canonical(kind, Some(target));
 
         self.table
