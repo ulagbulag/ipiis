@@ -1,8 +1,11 @@
 mod protocol;
 
-use std::{sync::Arc, time::Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
-use ipiis_modules_bench_common::{args, byte_unit::Byte, clap::Parser};
+use ipiis_modules_bench_common::{args, byte_unit::Byte, clap::Parser, simulation::Simulator};
 use ipis::{
     core::{anyhow::Result, chrono::Utc},
     futures,
@@ -34,6 +37,16 @@ async fn main() -> Result<()> {
     info!("- Number of Iteration: {}", args.inputs.iter);
     info!("- Number of Threads: {}", args.inputs.num_threads);
     info!("- Protocol: {protocol_name}");
+
+    // compose simulation environment
+    let mut simulator = Simulator::default();
+    if let Some(delay) = args.simulation.network_delay_ms.map(Duration::from_millis) {
+        if let Some(subnet) = args.simulation.network_delay_subnet {
+            info!("- Simulation :: Network Delay: {delay:?}");
+            info!("- Simulation :: Network Delay on Subnet: {subnet}");
+            simulator.apply_network_delay(delay, subnet)?;
+        }
+    }
 
     let size_bytes: usize = args.inputs.size.get_bytes().try_into()?;
     let num_iteration: usize = args.inputs.iter.get_bytes().try_into()?;

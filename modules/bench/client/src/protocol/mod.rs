@@ -1,8 +1,8 @@
-use std::{ops::Range, sync::Arc, time::Duration};
+use std::{ops::Range, sync::Arc};
 
 use ipiis_common::Ipiis;
 use ipiis_modules_bench_common::{args, IpiisBench};
-use ipis::{async_trait::async_trait, core::anyhow::Result, stream::DynStream, tokio};
+use ipis::{async_trait::async_trait, core::anyhow::Result, stream::DynStream};
 
 mod quic;
 mod tcp;
@@ -35,11 +35,6 @@ where
         .skip(ctx.offset as usize)
         .step_by(ctx.num_threads)
     {
-        // compose simulation environment
-        if let Some(delay) = ctx.simulation.delay_ms.map(Duration::from_millis) {
-            tokio::time::sleep(delay).await;
-        }
-
         let data = unsafe {
             ::core::slice::from_raw_parts(ctx.data.as_ptr().add(range.start), ctx.size_bytes)
         };

@@ -23,7 +23,7 @@ RUN apk add --no-cache libgcc
 FROM docker.io/rust:1-alpine${ALPINE_VERSION} as builder
 
 # Install dependencies
-RUN apk add --no-cache musl-dev
+RUN apk add --no-cache iproute2-tc musl-dev
 
 # Load source files
 ADD . /src

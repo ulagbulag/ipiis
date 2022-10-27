@@ -1,5 +1,6 @@
 pub extern crate byte_unit;
 pub extern crate clap;
+pub extern crate ipiis_modules_bench_simulation as simulation;
 
 pub mod args;
 
