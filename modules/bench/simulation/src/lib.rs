@@ -22,9 +22,10 @@ impl Simulator {
                 r#"
 for interface in $(
     ip address |
-        grep 'qdisc [fm]q' |
         grep 'state UP' |
-        egrep -o 'en[0-9a-z]+'
+        egrep -o '^[0-9]+\: (en[0-9a-z]+)' |
+        sed 's/.* \(en.*\)/\1/g' |
+        cat
 ); do
     tc qdisc del dev $interface root # Ensure you start from a clean state
     tc qdisc add dev $interface root handle 1: prio
@@ -61,9 +62,10 @@ done
                 r#"
 for interface in $(
     ip address |
-        grep 'qdisc [fm]q' |
         grep 'state UP' |
-        egrep -o 'en[0-9a-z]+'
+        egrep -o '^[0-9]+\: (en[0-9a-z]+)' |
+        sed 's/.* \(en.*\)/\1/g' |
+        cat
 ); do
     tc qdisc del dev $interface root # Ensure you start from a clean state
 done
