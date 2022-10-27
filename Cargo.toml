@@ -10,6 +10,7 @@ members = [
     "modules/bench/common",
     "modules/bench/server",
     "modules/bench/simulation",
+    "modules/cli",
     "pallet",
     "runtime",
 ]
