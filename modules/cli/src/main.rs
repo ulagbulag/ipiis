@@ -2,7 +2,11 @@ mod args;
 
 use clap::Parser;
 use ipiis_api::{client::IpiisClient, common::Ipiis};
-use ipis::{core::anyhow::Result, env::Infer, tokio};
+use ipis::{
+    core::{anyhow::Result, value::hash::Hash},
+    env::Infer,
+    tokio,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -23,6 +27,8 @@ async fn main() -> Result<()> {
             address,
             is_primary,
         } => {
+            let kind = kind.as_ref().map(|kind| Hash::with_str(kind));
+
             client
                 .set_address(kind.as_ref(), &account, &address)
                 .await?;

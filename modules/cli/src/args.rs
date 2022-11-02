@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use ipiis_api::{client::IpiisClient, common::Ipiis};
-use ipis::core::{account::AccountRef, value::hash::Hash};
+use ipis::core::account::AccountRef;
 
 #[derive(Debug, Parser)]
 #[clap(author, version, about, long_about = None)]
@@ -14,7 +14,7 @@ pub enum Command {
     SetAccount {
         /// Kind of the target server
         #[clap(long, env = "ipiis_client_kind")]
-        kind: Option<Hash>,
+        kind: Option<String>,
 
         /// Account of the target server
         #[clap(long, env = "ipiis_client_account")]
