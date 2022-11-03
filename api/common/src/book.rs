@@ -38,13 +38,7 @@ impl<Address> AddressBook<Address> {
 
         match self.table.get(key)? {
             Some(address) => Ok(Some(String::from_utf8(address.to_vec())?.parse()?)),
-            None => {
-                if &self.account_me.account_ref() == target {
-                    bail!("cannot get the address myself");
-                } else {
-                    Ok(None)
-                }
-            }
+            None => Ok(None),
         }
     }
 
