@@ -16,5 +16,5 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 [dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
 
+dirs = "4.0"
 sled = "0.34"
-tempfile = "3.3"

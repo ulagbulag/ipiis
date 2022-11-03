@@ -1,10 +1,13 @@
 use core::{marker::PhantomData, str::FromStr};
-use std::{net::ToSocketAddrs, sync::Arc};
+use std::{net::ToSocketAddrs, path::PathBuf, sync::Arc};
 
-use ipis::core::{
-    account::{Account, AccountRef},
-    anyhow::{anyhow, bail, Result},
-    value::hash::Hash,
+use ipis::{
+    core::{
+        account::{Account, AccountRef},
+        anyhow::{anyhow, bail, Result},
+        value::hash::Hash,
+    },
+    env::infer,
 };
 
 #[derive(Clone, Debug)]
@@ -16,16 +19,20 @@ pub struct RarpClient<Address> {
 }
 
 impl<Address> RarpClient<Address> {
-    pub fn new<P>(account_me: Account, db_path: P) -> Result<Self>
-    where
-        P: AsRef<::std::path::Path>,
-    {
+    pub fn new<P>(account_me: Account) -> Result<Self> {
         Ok(Self {
             account_ref: account_me.account_ref().into(),
             account_me: account_me.into(),
-            // TODO: allow to store in specific directory
-            table: sled::open(::tempfile::tempdir()?.path().join(db_path))?,
+            table: sled::open(Self::infer_db_path()?)?,
             _address: Default::default(),
+        })
+    }
+
+    fn infer_db_path() -> Result<PathBuf> {
+        infer("ipiis_client_address_db").or_else(|e| {
+            let mut dir = ::dirs::home_dir().ok_or(e)?;
+            dir.push(".ipiis");
+            Ok(dir)
         })
     }
 

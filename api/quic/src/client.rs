@@ -70,26 +70,16 @@ impl IpiisClient {
             endpoint
         };
 
-        Self::with_address_db_path(
-            account_me,
-            account_primary,
-            "ipiis_client_address_db",
-            endpoint,
-        )
-        .await
+        Self::with_address_db_path(account_me, account_primary, endpoint).await
     }
 
-    pub(crate) async fn with_address_db_path<P>(
+    pub(crate) async fn with_address_db_path(
         account_me: Account,
         account_primary: Option<AccountRef>,
-        db_path: P,
         endpoint: Endpoint,
-    ) -> Result<Self>
-    where
-        P: AsRef<::std::path::Path>,
-    {
+    ) -> Result<Self> {
         let client = Self {
-            rarp: RarpClient::new(account_me, db_path)?,
+            rarp: RarpClient::new(account_me)?,
             endpoint,
         };
 
