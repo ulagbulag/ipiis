@@ -69,8 +69,7 @@ impl IpiisServer {
         };
 
         Ok(Self {
-            client: crate::client::IpiisClient::with_address_db_path(account_me, account_primary)
-                .await?,
+            client: crate::client::IpiisClient::new(account_me, account_primary).await?,
             incoming,
         })
     }

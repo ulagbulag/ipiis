@@ -46,13 +46,6 @@ impl<'a> Infer<'a> for IpiisClient {
 
 impl IpiisClient {
     pub async fn new(account_me: Account, account_primary: Option<AccountRef>) -> Result<Self> {
-        Self::with_address_db_path(account_me, account_primary).await
-    }
-
-    pub(crate) async fn with_address_db_path(
-        account_me: Account,
-        account_primary: Option<AccountRef>,
-    ) -> Result<Self> {
         let client = Self {
             rarp: RarpClient::new(account_me)?,
         };

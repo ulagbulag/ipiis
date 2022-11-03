@@ -29,7 +29,7 @@ impl<'a> Infer<'a> for IpiisClient {
         let account_me = infer("ipis_account_me")?;
         let account_primary = infer("ipiis_account_primary").ok();
 
-        Self::new(account_me, account_primary).await
+        Self::new(account_me, account_primary, None).await
     }
 
     async fn genesis(
@@ -41,43 +41,42 @@ impl<'a> Infer<'a> for IpiisClient {
         let account = Account::generate();
 
         // init an endpoint
-        Self::new(account, account_primary).await
+        Self::new(account, account_primary, None).await
     }
 }
 
 impl IpiisClient {
-    pub async fn new(account_me: Account, account_primary: Option<AccountRef>) -> Result<Self> {
-        let endpoint = {
-            let crypto = ::rustls::ClientConfig::builder()
-                .with_safe_defaults()
-                .with_custom_certificate_verifier(crate::cert::ServerVerification::new())
-                .with_no_client_auth();
-            let client_config = {
-                let mut config = ::quinn::ClientConfig::new(Arc::new(crypto));
-                config.transport = {
-                    let mut config = Arc::try_unwrap(config.transport).unwrap();
-                    config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
-                    config.into()
-                };
-                config
-            };
-
-            let addr = "0.0.0.0:0".parse()?;
-
-            let mut endpoint = Endpoint::client(addr)?;
-            endpoint.set_default_client_config(client_config);
-
-            endpoint
-        };
-
-        Self::with_address_db_path(account_me, account_primary, endpoint).await
-    }
-
-    pub(crate) async fn with_address_db_path(
+    pub async fn new(
         account_me: Account,
         account_primary: Option<AccountRef>,
-        endpoint: Endpoint,
+        endpoint: Option<Endpoint>,
     ) -> Result<Self> {
+        let endpoint = match endpoint {
+            Some(endpoint) => endpoint,
+            None => {
+                let crypto = ::rustls::ClientConfig::builder()
+                    .with_safe_defaults()
+                    .with_custom_certificate_verifier(crate::cert::ServerVerification::new())
+                    .with_no_client_auth();
+                let client_config = {
+                    let mut config = ::quinn::ClientConfig::new(Arc::new(crypto));
+                    config.transport = {
+                        let mut config = Arc::try_unwrap(config.transport).unwrap();
+                        config.max_idle_timeout(Some(Duration::from_secs(10).try_into()?));
+                        config.into()
+                    };
+                    config
+                };
+
+                let addr = "0.0.0.0:0".parse()?;
+
+                let mut endpoint = Endpoint::client(addr)?;
+                endpoint.set_default_client_config(client_config);
+
+                endpoint
+            }
+        };
+
         let client = Self {
             rarp: RarpClient::new(account_me)?,
             endpoint,
