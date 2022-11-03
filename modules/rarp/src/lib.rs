@@ -29,7 +29,7 @@ impl<Address> RarpClient<Address> {
     }
 
     fn infer_db_path() -> Result<PathBuf> {
-        infer("ipiis_client_address_db").or_else(|e| {
+        infer("ipiis_rarp_db").or_else(|e| {
             let mut dir = ::dirs::home_dir().ok_or(e)?;
             dir.push(".ipiis");
             Ok(dir)
