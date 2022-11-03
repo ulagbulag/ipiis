@@ -19,7 +19,7 @@ pub struct RarpClient<Address> {
 }
 
 impl<Address> RarpClient<Address> {
-    pub fn new<P>(account_me: Account) -> Result<Self> {
+    pub fn new(account_me: Account) -> Result<Self> {
         Ok(Self {
             account_ref: account_me.account_ref().into(),
             account_me: account_me.into(),

@@ -94,7 +94,6 @@ impl IpiisServer {
             client: crate::client::IpiisClient::with_address_db_path(
                 account_me,
                 account_primary,
-                "ipiis_server_address_db",
                 endpoint,
             )
             .await?,
