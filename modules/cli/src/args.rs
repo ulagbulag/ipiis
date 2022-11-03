@@ -11,6 +11,20 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    GetAccountPrimary {
+        /// Kind of the target server
+        #[clap(long, env = "ipiis_client_kind")]
+        kind: Option<String>,
+    },
+    GetAddress {
+        /// Kind of the target server
+        #[clap(long, env = "ipiis_client_kind")]
+        kind: Option<String>,
+
+        /// Account of the target server
+        #[clap(long, env = "ipiis_client_account")]
+        account: Option<AccountRef>,
+    },
     SetAccount {
         /// Kind of the target server
         #[clap(long, env = "ipiis_client_kind")]
@@ -26,6 +40,6 @@ pub enum Command {
 
         /// Whether the target server is primary
         #[clap(long, env = "ipiis_client_is_primary")]
-        is_primary: bool,
+        primary: bool,
     },
 }
