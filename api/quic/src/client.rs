@@ -1,6 +1,6 @@
 use std::{net::ToSocketAddrs, sync::Arc, time::Duration};
 
-use ipiis_api_common::rarp::RarpClient;
+use ipiis_api_common::router::RouterClient;
 use ipiis_common::{external_call, Ipiis};
 use ipis::{
     async_trait::async_trait,
@@ -16,7 +16,7 @@ use quinn::{Connection, Endpoint};
 
 #[derive(Clone)]
 pub struct IpiisClient {
-    pub(crate) rarp: RarpClient<<Self as Ipiis>::Address>,
+    pub(crate) router: RouterClient<<Self as Ipiis>::Address>,
     endpoint: Endpoint,
 }
 
@@ -78,16 +78,16 @@ impl IpiisClient {
         };
 
         let client = Self {
-            rarp: RarpClient::new(account_me)?,
+            router: RouterClient::new(account_me)?,
             endpoint,
         };
 
         // try to add the primary account's address
         if let Some(account_primary) = account_primary {
-            client.rarp.set_primary(None, &account_primary)?;
+            client.router.set_primary(None, &account_primary)?;
 
             if let Ok(address) = infer("ipiis_account_primary_address") {
-                client.rarp.set(None, &account_primary, &address)?;
+                client.router.set(None, &account_primary, &address)?;
             }
         }
 
@@ -102,15 +102,15 @@ impl Ipiis for IpiisClient {
     type Writer = ::quinn::SendStream;
 
     unsafe fn account_me(&self) -> Result<&Account> {
-        Ok(&self.rarp.account_me)
+        Ok(&self.router.account_me)
     }
 
     fn account_ref(&self) -> &AccountRef {
-        &self.rarp.account_ref
+        &self.router.account_ref
     }
 
     async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef> {
-        match self.rarp.get_primary(kind)? {
+        match self.router.get_primary(kind)? {
             Some(address) => Ok(address),
             None => match kind {
                 Some(kind) => {
@@ -128,9 +128,9 @@ impl Ipiis for IpiisClient {
                     );
 
                     // store response
-                    self.rarp.set_primary(Some(kind), &account)?;
+                    self.router.set_primary(Some(kind), &account)?;
                     if let Some(address) = address {
-                        self.rarp.set(Some(kind), &account, &address)?;
+                        self.router.set(Some(kind), &account, &address)?;
                     }
 
                     // unpack response
@@ -142,10 +142,10 @@ impl Ipiis for IpiisClient {
     }
 
     async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()> {
-        self.rarp.set_primary(kind, account)?;
+        self.router.set_primary(kind, account)?;
 
         // update server-side if you are a root
-        if let Some(primary) = self.rarp.get_primary(None)? {
+        if let Some(primary) = self.router.get_primary(None)? {
             if self.account_ref() == &primary {
                 // external call
                 external_call!(
@@ -165,9 +165,9 @@ impl Ipiis for IpiisClient {
         kind: Option<&Hash>,
         target: &AccountRef,
     ) -> Result<<Self as Ipiis>::Address> {
-        match self.rarp.get(kind, target)? {
+        match self.router.get(kind, target)? {
             Some(address) => Ok(address),
-            None => match self.rarp.get_primary(None)? {
+            None => match self.router.get_primary(None)? {
                 Some(primary) => {
                     // external call
                     let (address,) = external_call!(
@@ -180,7 +180,7 @@ impl Ipiis for IpiisClient {
                     );
 
                     // store response
-                    self.rarp.set(kind, target, &address)?;
+                    self.router.set(kind, target, &address)?;
 
                     // unpack response
                     Ok(address)
@@ -199,10 +199,10 @@ impl Ipiis for IpiisClient {
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()> {
-        self.rarp.set(kind, target, address)?;
+        self.router.set(kind, target, address)?;
 
         // update server-side if you are a root
-        if let Some(primary) = self.rarp.get_primary(None)? {
+        if let Some(primary) = self.router.get_primary(None)? {
             if self.account_ref() == &primary {
                 // external call
                 external_call!(

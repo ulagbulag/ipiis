@@ -11,14 +11,14 @@ use ipis::{
 };
 
 #[derive(Clone, Debug)]
-pub struct RarpClient<Address> {
+pub struct RouterClient<Address> {
     pub account_me: Arc<Account>,
     pub account_ref: Arc<AccountRef>,
     table: sled::Db,
     _address: PhantomData<Address>,
 }
 
-impl<Address> RarpClient<Address> {
+impl<Address> RouterClient<Address> {
     pub fn new(account_me: Account) -> Result<Self> {
         Ok(Self {
             account_ref: account_me.account_ref().into(),
@@ -29,7 +29,7 @@ impl<Address> RarpClient<Address> {
     }
 
     fn infer_db_path() -> Result<PathBuf> {
-        infer("ipiis_rarp_db").or_else(|e| {
+        infer("ipiis_router_db").or_else(|e| {
             let mut dir = ::dirs::home_dir().ok_or(e)?;
             dir.push(".ipiis");
             Ok(dir)

@@ -65,7 +65,7 @@ macro_rules! impl_ipiis_server {
 
                     // handle data
                     let account = client.get_account_primary(kind.as_ref()).await?;
-                    let address = client.rarp.get(kind.as_ref(), &account)?;
+                    let address = client.router.get(kind.as_ref(), &account)?;
 
                     // sign data
                     let sign = client.sign_as_guarantor(sign_as_guarantee)?;

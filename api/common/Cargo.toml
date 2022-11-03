@@ -16,4 +16,4 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 [dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
 ipiis-common = { path = "../../common" }
-ipiis-modules-rarp = { path = "../../modules/rarp" }
+ipiis-modules-router = { path = "../../modules/router" }

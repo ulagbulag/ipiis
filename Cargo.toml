@@ -11,7 +11,7 @@ members = [
     "modules/bench/server",
     "modules/bench/simulation",
     "modules/cli",
-    "modules/rarp",
+    "modules/router",
     "pallet",
     "runtime",
 ]
