@@ -1,6 +1,6 @@
 use std::net::ToSocketAddrs;
 
-use ipiis_api_common::book::AddressBook;
+use ipiis_api_common::rarp::RarpClient;
 use ipiis_common::{external_call, Ipiis};
 use ipis::{
     async_trait::async_trait,
@@ -16,7 +16,7 @@ use ipis::{
 
 #[derive(Clone)]
 pub struct IpiisClient {
-    pub(crate) book: AddressBook<<Self as Ipiis>::Address>,
+    pub(crate) rarp: RarpClient<<Self as Ipiis>::Address>,
 }
 
 #[async_trait]
@@ -52,21 +52,21 @@ impl IpiisClient {
     pub(crate) async fn with_address_db_path<P>(
         account_me: Account,
         account_primary: Option<AccountRef>,
-        book_path: P,
+        db_path: P,
     ) -> Result<Self>
     where
         P: AsRef<::std::path::Path>,
     {
         let client = Self {
-            book: AddressBook::new(account_me, book_path)?,
+            rarp: RarpClient::new(account_me, db_path)?,
         };
 
         // try to add the primary account's address
         if let Some(account_primary) = account_primary {
-            client.book.set_primary(None, &account_primary)?;
+            client.rarp.set_primary(None, &account_primary)?;
 
             if let Ok(address) = infer("ipiis_account_primary_address") {
-                client.book.set(None, &account_primary, &address)?;
+                client.rarp.set(None, &account_primary, &address)?;
             }
         }
 
@@ -81,15 +81,15 @@ impl Ipiis for IpiisClient {
     type Writer = tokio::io::WriteHalf<tokio::net::TcpStream>;
 
     unsafe fn account_me(&self) -> Result<&Account> {
-        Ok(&self.book.account_me)
+        Ok(&self.rarp.account_me)
     }
 
     fn account_ref(&self) -> &AccountRef {
-        &self.book.account_ref
+        &self.rarp.account_ref
     }
 
     async fn get_account_primary(&self, kind: Option<&Hash>) -> Result<AccountRef> {
-        match self.book.get_primary(kind)? {
+        match self.rarp.get_primary(kind)? {
             Some(address) => Ok(address),
             None => match kind {
                 Some(kind) => {
@@ -107,9 +107,9 @@ impl Ipiis for IpiisClient {
                     );
 
                     // store response
-                    self.book.set_primary(Some(kind), &account)?;
+                    self.rarp.set_primary(Some(kind), &account)?;
                     if let Some(address) = address {
-                        self.book.set(Some(kind), &account, &address)?;
+                        self.rarp.set(Some(kind), &account, &address)?;
                     }
 
                     // unpack response
@@ -121,10 +121,10 @@ impl Ipiis for IpiisClient {
     }
 
     async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()> {
-        self.book.set_primary(kind, account)?;
+        self.rarp.set_primary(kind, account)?;
 
         // update server-side if you are a root
-        if let Some(primary) = self.book.get_primary(None)? {
+        if let Some(primary) = self.rarp.get_primary(None)? {
             if self.account_ref() == &primary {
                 // external call
                 external_call!(
@@ -144,9 +144,9 @@ impl Ipiis for IpiisClient {
         kind: Option<&Hash>,
         target: &AccountRef,
     ) -> Result<<Self as Ipiis>::Address> {
-        match self.book.get(kind, target)? {
+        match self.rarp.get(kind, target)? {
             Some(address) => Ok(address),
-            None => match self.book.get_primary(None)? {
+            None => match self.rarp.get_primary(None)? {
                 Some(primary) => {
                     // external call
                     let (address,) = external_call!(
@@ -159,7 +159,7 @@ impl Ipiis for IpiisClient {
                     );
 
                     // store response
-                    self.book.set(kind, target, &address)?;
+                    self.rarp.set(kind, target, &address)?;
 
                     // unpack response
                     Ok(address)
@@ -178,10 +178,10 @@ impl Ipiis for IpiisClient {
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()> {
-        self.book.set(kind, target, address)?;
+        self.rarp.set(kind, target, address)?;
 
         // update server-side if you are a root
-        if let Some(primary) = self.book.get_primary(None)? {
+        if let Some(primary) = self.rarp.get_primary(None)? {
             if self.account_ref() == &primary {
                 // external call
                 external_call!(

@@ -1,5 +1,5 @@
 [package]
-name = "ipiis-api-common"
+name = "ipiis-modules-rarp"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,5 +15,6 @@ repository = "https://github.com/ulagbulag-village/ipiis"
 
 [dependencies]
 ipis = { git = "https://github.com/ulagbulag-village/ipis" }
-ipiis-common = { path = "../../common" }
-ipiis-modules-rarp = { path = "../../modules/rarp" }
+
+sled = "0.34"
+tempfile = "3.3"

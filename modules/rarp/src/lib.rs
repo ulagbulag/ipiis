@@ -8,15 +8,15 @@ use ipis::core::{
 };
 
 #[derive(Clone, Debug)]
-pub struct AddressBook<Address> {
+pub struct RarpClient<Address> {
     pub account_me: Arc<Account>,
     pub account_ref: Arc<AccountRef>,
     table: sled::Db,
     _address: PhantomData<Address>,
 }
 
-impl<Address> AddressBook<Address> {
-    pub fn new<P>(account_me: Account, book_path: P) -> Result<Self>
+impl<Address> RarpClient<Address> {
+    pub fn new<P>(account_me: Account, db_path: P) -> Result<Self>
     where
         P: AsRef<::std::path::Path>,
     {
@@ -24,7 +24,7 @@ impl<Address> AddressBook<Address> {
             account_ref: account_me.account_ref().into(),
             account_me: account_me.into(),
             // TODO: allow to store in specific directory
-            table: sled::open(::tempfile::tempdir()?.path().join(book_path))?,
+            table: sled::open(::tempfile::tempdir()?.path().join(db_path))?,
             _address: Default::default(),
         })
     }
@@ -56,21 +56,21 @@ impl<Address> AddressBook<Address> {
         Address: ::std::fmt::Debug + ToSocketAddrs + ToString,
     {
         // verify address
-        if address
+        match address
             .to_socket_addrs()
             .map_err(|e| anyhow!("failed to parse the socket address: {address:?}: {e}"))?
-            .count()
-            != 1
+            .next()
         {
-            bail!("failed to parse the socket address: {address:?}");
+            Some(address) => {
+                let key = self.to_key_canonical(kind, Some(target));
+
+                self.table
+                    .insert(key, address.to_string().into_bytes())
+                    .map(|_| ())
+                    .map_err(Into::into)
+            }
+            None => bail!("failed to parse the socket address: {address:?}"),
         }
-
-        let key = self.to_key_canonical(kind, Some(target));
-
-        self.table
-            .insert(key, address.to_string().into_bytes())
-            .map(|_| ())
-            .map_err(Into::into)
     }
 
     pub fn set_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()> {
