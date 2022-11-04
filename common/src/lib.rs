@@ -15,7 +15,7 @@ use rkyv::{Archive, Serialize};
 #[async_trait]
 pub trait Ipiis {
     type Address: IsSigned + Send + Sync;
-    type Reader: AsyncRead + Send + Unpin + 'static;
+    type Reader: AsyncRead + Send + Sync + Unpin + 'static;
     type Writer: AsyncWrite + Send + Unpin + 'static;
 
     /// # Safety
