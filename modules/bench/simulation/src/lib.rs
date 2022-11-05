@@ -34,7 +34,7 @@ for interface in $(
 done
 "#,
                 delay = delay.as_millis(),
-                dst = destination.to_string(),
+                dst = destination,
             ))
             .output()?;
 
