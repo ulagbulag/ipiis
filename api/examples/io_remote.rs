@@ -45,10 +45,7 @@ async fn main() -> Result<()> {
     // get the center's account from `end_1`
     // route: `end_1` --> `edge_1` --> `center_1`
     assert_eq!(
-        end_1
-            .get_address(None, &center_1_account)
-            .await?
-            .to_string(),
+        end_1.get_address(None, &center_1_account).await?,
         "127.0.0.1:9801",
     );
 
