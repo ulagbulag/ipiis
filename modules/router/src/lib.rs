@@ -89,6 +89,18 @@ impl<Address> RouterClient<Address> {
             .map_err(Into::into)
     }
 
+    pub fn delete(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<()> {
+        let key = self.to_key_canonical(kind, Some(target));
+
+        self.table.remove(key).map(|_| ()).map_err(Into::into)
+    }
+
+    pub fn delete_primary(&self, kind: Option<&Hash>) -> Result<()> {
+        let key = self.to_key_canonical(kind, None);
+
+        self.table.remove(key).map(|_| ()).map_err(Into::into)
+    }
+
     fn to_key_canonical(&self, kind: Option<&Hash>, account: Option<&AccountRef>) -> Vec<u8> {
         #[allow(clippy::identity_op)]
         let flag = ((kind.is_some() as u8) << 1) + ((account.is_some() as u8) << 0);

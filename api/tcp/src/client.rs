@@ -128,6 +128,25 @@ impl Ipiis for IpiisClient {
         Ok(())
     }
 
+    async fn delete_account_primary(&self, kind: Option<&Hash>) -> Result<()> {
+        self.router.delete_primary(kind)?;
+
+        // update server-side if you are a root
+        if let Some(primary) = self.router.get_primary(None)? {
+            if self.account_ref() == &primary {
+                // external call
+                external_call!(
+                    client: self,
+                    target: None => &primary,
+                    request: ::ipiis_common::io => DeleteAccountPrimary,
+                    sign: self.sign_owned(primary, kind.copied())?,
+                    inputs: { },
+                );
+            }
+        }
+        Ok(())
+    }
+
     async fn get_address(
         &self,
         kind: Option<&Hash>,
@@ -178,6 +197,25 @@ impl Ipiis for IpiisClient {
                     target: None => &primary,
                     request: ::ipiis_common::io => SetAddress,
                     sign: self.sign_owned(primary, (kind.copied(), *target, address.clone()))?,
+                    inputs: { },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    async fn delete_address(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<()> {
+        self.router.delete(kind, target)?;
+
+        // update server-side if you are a root
+        if let Some(primary) = self.router.get_primary(None)? {
+            if self.account_ref() == &primary {
+                // external call
+                external_call!(
+                    client: self,
+                    target: None => &primary,
+                    request: ::ipiis_common::io => DeleteAddress,
+                    sign: self.sign_owned(primary, (kind.copied(), *target))?,
                     inputs: { },
                 );
             }

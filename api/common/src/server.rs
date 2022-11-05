@@ -33,8 +33,10 @@ macro_rules! impl_ipiis_server {
                 request: ::ipiis_common::io => {
                     GetAccountPrimary => handle_get_account_primary,
                     SetAccountPrimary => handle_set_account_primary,
+                    DeleteAccountPrimary => handle_delete_account_primary,
                     GetAddress => handle_get_address,
                     SetAddress => handle_set_address,
+                    DeleteAddress => handle_delete_address,
                 },
             );
 
@@ -106,6 +108,32 @@ macro_rules! impl_ipiis_server {
                     })
                 }
 
+                async fn handle_delete_account_primary(
+                    client: &$server,
+                    req: ::ipiis_common::io::request::DeleteAccountPrimary<'static>,
+                ) -> Result<::ipiis_common::io::response::DeleteAccountPrimary<'static>> {
+                    // unpack sign
+                    let sign_as_guarantee = req.__sign.into_owned().await?;
+
+                    // verify as root
+                    sign_as_guarantee.metadata.ensure_self_signed()?;
+
+                    // unpack data
+                    let kind = sign_as_guarantee.data;
+
+                    // handle data
+                    client.delete_account_primary(kind.as_ref()).await?;
+
+                    // sign data
+                    let sign = client.sign_as_guarantor(sign_as_guarantee)?;
+
+                    // pack data
+                    Ok(::ipiis_common::io::response::DeleteAccountPrimary {
+                        __lifetime: Default::default(),
+                        __sign: ::ipis::stream::DynStream::Owned(sign),
+                    })
+                }
+
                 async fn handle_get_address(
                     client: &$server,
                     req: ::ipiis_common::io::request::GetAddress<
@@ -164,6 +192,33 @@ macro_rules! impl_ipiis_server {
 
                     // pack data
                     Ok(::ipiis_common::io::response::SetAddress {
+                        __lifetime: Default::default(),
+                        __sign: ::ipis::stream::DynStream::Owned(sign),
+                    })
+                }
+
+                async fn handle_delete_address(
+                    client: &$server,
+                    req: ::ipiis_common::io::request::DeleteAddress<'static>,
+                ) -> Result<::ipiis_common::io::response::DeleteAddress<'static>> {
+                    // unpack sign
+                    let sign_as_guarantee = req.__sign.into_owned().await?;
+
+                    // verify as root
+                    sign_as_guarantee.metadata.ensure_self_signed()?;
+
+                    // unpack data
+                    let kind = sign_as_guarantee.data.0;
+                    let account = sign_as_guarantee.data.1;
+
+                    // handle data
+                    client.delete_address(kind.as_ref(), &account).await?;
+
+                    // sign data
+                    let sign = client.sign_as_guarantor(sign_as_guarantee)?;
+
+                    // pack data
+                    Ok(::ipiis_common::io::response::DeleteAddress {
                         __lifetime: Default::default(),
                         __sign: ::ipis::stream::DynStream::Owned(sign),
                     })

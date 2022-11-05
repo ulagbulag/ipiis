@@ -32,6 +32,8 @@ pub trait Ipiis {
 
     async fn set_account_primary(&self, kind: Option<&Hash>, account: &AccountRef) -> Result<()>;
 
+    async fn delete_account_primary(&self, kind: Option<&Hash>) -> Result<()>;
+
     async fn get_address(
         &self,
         kind: Option<&Hash>,
@@ -44,6 +46,8 @@ pub trait Ipiis {
         target: &AccountRef,
         address: &<Self as Ipiis>::Address,
     ) -> Result<()>;
+
+    async fn delete_address(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<()>;
 
     fn sign<'a, T>(&self, target: AccountRef, msg: &'a T) -> Result<Data<GuaranteeSigned, &'a T>>
     where
@@ -107,6 +111,10 @@ where
         (**self).set_account_primary(kind, account).await
     }
 
+    async fn delete_account_primary(&self, kind: Option<&Hash>) -> Result<()> {
+        (**self).delete_account_primary(kind).await
+    }
+
     async fn get_address(
         &self,
         kind: Option<&Hash>,
@@ -122,6 +130,10 @@ where
         address: &<Self as Ipiis>::Address,
     ) -> Result<()> {
         (**self).set_address(kind, target, address).await
+    }
+
+    async fn delete_address(&self, kind: Option<&Hash>, target: &AccountRef) -> Result<()> {
+        (**self).delete_address(kind, target).await
     }
 
     fn sign<'a, T>(&self, target: AccountRef, msg: &'a T) -> Result<Data<GuaranteeSigned, &'a T>>
@@ -194,6 +206,13 @@ define_io! {
         output_sign: Data<GuarantorSigned, (Option<Hash>, AccountRef)>,
         generics: { },
     },
+    DeleteAccountPrimary {
+        inputs: { },
+        input_sign: Data<GuaranteeSigned, Option<Hash>>,
+        outputs: { },
+        output_sign: Data<GuarantorSigned, Option<Hash>>,
+        generics: { },
+    },
     GetAddress {
         inputs: { },
         input_sign: Data<GuaranteeSigned, (Option<Hash>, AccountRef)>,
@@ -209,6 +228,13 @@ define_io! {
         outputs: { },
         output_sign: Data<GuarantorSigned, (Option<Hash>, AccountRef, Address)>,
         generics: { Address, },
+    },
+    DeleteAddress {
+        inputs: { },
+        input_sign: Data<GuaranteeSigned, (Option<Hash>, AccountRef)>,
+        outputs: { },
+        output_sign: Data<GuarantorSigned, (Option<Hash>, AccountRef)>,
+        generics: { },
     },
 }
 
