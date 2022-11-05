@@ -21,21 +21,16 @@ async fn main() -> Result<()> {
 
     // execute a command
     match args.command {
-        args::Command::GetAccountPrimary { kind } => {
-            let kind = kind.as_ref().map(|kind| Hash::with_str(kind));
-
-            let account = client.get_account_primary(kind.as_ref()).await?.to_string();
-            println!("Account = {account}");
-            Ok(())
-        }
-        args::Command::GetAddress { kind, account } => {
+        args::Command::GetAccount { kind, account } => {
             let kind = kind.as_ref().map(|kind| Hash::with_str(kind));
             let target = match account {
                 Some(account) => account,
                 None => client.get_account_primary(kind.as_ref()).await?,
             };
 
+            let account = target.to_string();
             let address = client.get_address(kind.as_ref(), &target).await?;
+            println!("Account = {account}");
             println!("Address = {address}");
             Ok(())
         }
@@ -53,6 +48,22 @@ async fn main() -> Result<()> {
             if primary {
                 client.set_account_primary(kind.as_ref(), &account).await?;
             }
+            Ok(())
+        }
+        args::Command::DeleteAccount { kind, account } => {
+            let kind = kind.as_ref().map(|kind| Hash::with_str(kind));
+            let target = match account {
+                Some(account) => account,
+                None => client.get_account_primary(kind.as_ref()).await?,
+            };
+
+            if account.is_none() {
+                client.delete_account_primary(kind.as_ref()).await?;
+            }
+
+            let account = target.to_string();
+            client.delete_address(kind.as_ref(), &target).await?;
+            println!("Account = {account}");
             Ok(())
         }
     }

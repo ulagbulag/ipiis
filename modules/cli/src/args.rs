@@ -9,14 +9,10 @@ pub struct Args {
     pub command: Command,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    GetAccountPrimary {
-        /// Kind of the target server
-        #[clap(long, env = "ipiis_client_kind")]
-        kind: Option<String>,
-    },
-    GetAddress {
+    GetAccount {
         /// Kind of the target server
         #[clap(long, env = "ipiis_client_kind")]
         kind: Option<String>,
@@ -41,5 +37,14 @@ pub enum Command {
         /// Whether the target server is primary
         #[clap(long, env = "ipiis_client_is_primary")]
         primary: bool,
+    },
+    DeleteAccount {
+        /// Kind of the target server
+        #[clap(long, env = "ipiis_client_kind")]
+        kind: Option<String>,
+
+        /// Account of the target server
+        #[clap(long, env = "ipiis_client_account")]
+        account: Option<AccountRef>,
     },
 }
